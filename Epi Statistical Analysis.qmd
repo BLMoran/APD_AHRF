@@ -9,6 +9,8 @@ format:
     grid: 
       body-width: 4000px
       sidebar-width: 150px
+execute:
+  cache: true
 toc: true
 toc-location: left
 toc-depth: 5
@@ -627,15 +629,11 @@ hosp_mort_pf_arr <- tibble(hosp_mort_pf_arr_mean, hosp_mort_pf_arr_lci, hosp_mor
 arr <- function(plot){
   # Extract smooth data
   smooths <- ggplot_build(plot)$data[[1]] 
-  
-  # Find values for varying values
-  smooth_lci <- (smooths$y[1] - smooths$se[1]*qnorm(0.975))
-  smooth_uci <- (smooths$y[1] + smooths$se[1]*qnorm(0.975))
-  
+
   # Get 2005 and 2022 values (with SEs)
   mean_2005 <- smooths$y[1]*100
-  conf.low_2005 <- smooth_lci*100
-  conf.high_2005 <- smooth_uci*100
+  conf.low_2005 <- (smooths$y[1] - smooths$se[1]*qnorm(0.975))*100
+  conf.high_2005 <- (smooths$y[1] + smooths$se[1]*qnorm(0.975))*100
   mean_2022 <- smooths$y[80]*100
   conf.low_2022 <- (smooths$y[80] - smooths$se[80]*qnorm(0.975))*100
   conf.high_2022 <- (smooths$y[80] + smooths$se[80]*qnorm(0.975))*100
