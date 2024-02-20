@@ -70,6 +70,8 @@ library(gtsummary)
 library(lme4)
 library(survival)
 library(ggsurvfit)
+library(marginaleffects)
+library(gt)
 
 knitr::opts_chunk$set(echo = F, message = F, warning = F, error = T, 
                       out.width = "90%", dev = "png", dpi = 300, cache = T)
@@ -104,13 +106,13 @@ arf <- arf |>  mutate(icu_admit_source = case_when(
             (ICU_SRCE ==2) ~ "Emergency Department",
             (ICU_SRCE ==3) ~ "Ward",
             (ICU_SRCE ==4) ~ "ICU, Same Hospital",
-            (ICU_SRCE ==5) ~ "Ward, Other Hospital",
-            (ICU_SRCE ==6) ~ "ICU, Other Hopsital",
+            (ICU_SRCE ==5) ~ "Other Hospital",
+            (ICU_SRCE ==6) ~ "Other Hopsital",
             (ICU_SRCE ==9) ~ "Direct from Home")) |> 
   select(-ICU_SRCE)
 
 # Reorder Admission Source
-arf <- arf |>  mutate(icu_admit_source = factor(icu_admit_source, levels = c("Emergency Department", "Operating Theatre/Recovery", "Ward", "ICU, Same Hospital", "Ward, Other Hospital", "ICU, Other Hospital", "Direct from Home")))
+arf <- arf |>  mutate(icu_admit_source = factor(icu_admit_source, levels = c("Emergency Department", "Operating Theatre/Recovery", "Ward", "ICU, Same Hospital", "Other Hospital", "Direct from Home")))
 
 # Relabel Admission Diagnoses #
 # Minimal Admission Diagnosis
@@ -149,11 +151,42 @@ arf <- arf |> mutate(ANZRODRiskOfDeath = as.numeric(ANZRODRiskOfDeath))
 # Reorder Hospital Type
 arf <- arf |>  mutate(HospitalClassification = factor(HospitalClassification, levels = c("Tertiary", "Metropolitan", "Rural / Regional", "Private")))
 
+# Categorise CFS
+arf <- arf |> 
+  mutate(FRAILTY = case_when(
+    (FRAILTY == "1"|FRAILTY == "2"|FRAILTY == "3") ~ "Fit/Well",
+    (FRAILTY == "4"|FRAILTY == "5") ~ "Mild",
+    FRAILTY == "6" ~ "Moderate",
+     FRAILTY == "7" ~ "Severe"))
+
+# Rename Diabetes
+arf <- arf |> 
+    mutate(DIABETES = case_when(
+    DIABETES == "1" ~ "Type-1 Diabetes",
+    DIABETES == "2" ~ "Type-2 Diabetes",
+    DIABETES == "3" ~ "Gestational Diabetes",
+    DIABETES == "4" ~ "Secondary Diabetes/Other",
+    DIABETES == "5" ~ "None"))
+
+# Reorder Diabetes
+arf <- arf |> 
+  mutate(DIABETES = factor(DIABETES, levels = c("None", "Type-1 Diabetes", "Type-2 Diabetes", "Gestational Diabetes", "Secondary Diabetes/Other")))
+
 #==========================================EXPOSURE==========================================#
 
 # Calculate Continuous PaO2:FiO2
 arf <- arf |> 
   mutate(pf_cont = as.numeric(PAO2_ANZ)/as.numeric(FIO2_ANZ))
+
+# Calculate AHRF Vs No-AHRF
+arf <- arf |> 
+  mutate(AHRF = case_when(
+    pf_cont >=300 ~ "No AHRF",
+    pf_cont <300 ~ "AHRF"))
+
+# Reorder AHRF
+arf <- arf |> 
+  mutate(AHRF = factor(AHRF, levels = c("No AHRF", "AHRF")))
 
 #Calculate Categorical PaO2:FiO2
 arf <- arf |> 
@@ -284,7 +317,6 @@ arf <- arf[complete.cases(arf$icu_admit_source),]
 arf <- arf[complete.cases(arf$pf_cont),]
 arf <- arf[complete.cases(arf$SEX),]
 arf <- arf[complete.cases(arf$FRAILTY),]
-arf <- arf[complete.cases(arf$SMOKINGINTENSITY),]
 arf <- arf[complete.cases(arf$CHR_RESP),]
 arf <- arf[complete.cases(arf$CHR_CVS),]
 
@@ -299,10 +331,10 @@ arf <- arf |>  mutate(PatientID = row_number()) |>
   mutate(count_pt = row_number() == 1L) |> 
   ungroup()
 
-# Generate Table 1
-t1 <- arf |>  
-  select(patientn = count_pt, AGE, age_cat, SEX, Apache2Score, Apache3Score, ANZRODRiskOfDeath, ap3diag_min, COVID_pneumonitis_derived, icu_admit_source, HospitalClassification, pf_cat) |>  
-    tbl_summary(by = pf_cat, missing = "no",
+# Generate Table 1- AHRF vs No-AHRF
+t1_binary <- arf |>  
+  select(patientn = count_pt, AGE, age_cat, SEX, Apache2Score, Apache3Score, ANZRODRiskOfDeath, SOFA_Score, ap3diag_min, COVID_pneumonitis_derived, icu_admit_source, HospitalClassification, INV_IND, INV_DAYONE, NIV_IND, ECMO_IND, TRACHE_IND, AHRF) |>  
+    tbl_summary(by = AHRF, missing = "no",
             label = list(
               patientn = "Number of Patients",
               AGE = "Median Age in Years (IQR)",
@@ -311,10 +343,16 @@ t1 <- arf |>
               Apache2Score = "Median APACHE II Score (IQR)",
               Apache3Score = "Median APACHE III Score (IQR)",
               ANZRODRiskOfDeath = "Median ANZROD (IQR)",
+              SOFA_Score = "Median SOFA (IQR)",
               ap3diag_min = "Admission Diagnosis",
               COVID_pneumonitis_derived = "COVID Penumonitis (Proven)",
               icu_admit_source = "Admission Source",
-              HospitalClassification = "Hospital Type"),
+              HospitalClassification = "Hospital Type",
+              INV_IND = "Invasive MV",
+              INV_DAYONE = "IMV Day 1",
+              NIV_IND = "NIV",
+              ECMO_IND = "ECMO",
+              TRACHE_IND = "Tracheostomy"),
             value = list(
               COVID_pneumonitis_derived ~ 1),
             statistic = list(
@@ -324,6 +362,55 @@ t1 <- arf |>
               Apache2Score ~ "{median} ({p25}-{p75})",
               Apache3Score ~ "{median} ({p25}-{p75})",
               ANZRODRiskOfDeath ~ "{median} ({p25}-{p75})",
+              ANZRODRiskOfDeath ~ "{mean} ({sd})",
+              SOFA_Score ~ "{median} ({p25}-{p75})",
+              ap3diag_min ~ "{n} ({p}%)",
+              icu_admit_source ~ "{n} ({p}%)")) |> 
+  modify_header(stat_1 = "**No (PF >300)**", stat_2 = "**Yes (PF <300)**") |> 
+  modify_spanning_header(all_stat_cols() ~ "**Acute Hypoxaemic Respiratory Failure**") |> 
+  add_overall(col_label = "**Overall**", last = FALSE) |> 
+  bold_labels() |> 
+  italicize_labels()
+
+
+# Generate Table 1- AHRF Categories
+t1 <- arf |>  
+  select(patientn = count_pt, AGE, age_cat, SEX, Apache2Score, Apache3Score, ANZRODRiskOfDeath, SOFA_Score, ap3diag_min, COVID_pneumonitis_derived, icu_admit_source, HospitalClassification, CHR_RESP, CHR_CVS, CHR_LIV, CHR_REN, FRAILTY, DIABETES, pf_cat) |>  
+    tbl_summary(by = pf_cat, missing = "no",
+            label = list(
+              patientn = "Number of Patients",
+              AGE = "Median Age in Years (IQR)",
+              age_cat = "Age Category, Years",
+              SEX = "Gender",
+              Apache2Score = "Median APACHE II Score (IQR)",
+              Apache3Score = "Median APACHE III Score (IQR)",
+              ANZRODRiskOfDeath = "Median ANZROD (IQR)",
+              SOFA_Score = "Median SOFA (IQR)",
+              ap3diag_min = "Admission Diagnosis",
+              COVID_pneumonitis_derived = "COVID Penumonitis (Proven)",
+              icu_admit_source = "Admission Source",
+              HospitalClassification = "Hospital Type",
+              CHR_RESP = "Chronic Respiratory Disease",
+              CHR_CVS = "Chronic CVS Disease",
+              CHR_LIV = "Chronic Hepatic Disease",
+              CHR_REN = "Chronic Renal Disease",
+              FRAILTY = "Frailty",
+              DIABETES = "Diabetes"),
+            value = list(
+              COVID_pneumonitis_derived ~ 1,
+              CHR_RESP ~ 1,
+              CHR_CVS ~ 1,
+              CHR_LIV ~ 1,
+              CHR_REN ~ 1),
+            statistic = list(
+              patientn ~ "{n}",
+              AGE ~ "{median} ({p25}-{p75})",
+              SEX ~ "{n} ({p}%)",
+              Apache2Score ~ "{median} ({p25}-{p75})",
+              Apache3Score ~ "{median} ({p25}-{p75})",
+              ANZRODRiskOfDeath ~ "{median} ({p25}-{p75})",
+              ANZRODRiskOfDeath ~ "{mean} ({sd})",
+              SOFA_Score ~ "{median} ({p25}-{p75})",
               ap3diag_min ~ "{n} ({p}%)",
               icu_admit_source ~ "{n} ({p}%)")) |> 
   modify_header(stat_1 = "**None (PF >300)**", stat_2 = "**Mild (PF 200-300)**", stat_3 = "**Moderate (PF 100-200)**", stat_4 = "**Severe (PF < 100)**") |> 
@@ -331,7 +418,6 @@ t1 <- arf |>
   add_overall(col_label = "**Overall**", last = FALSE) |> 
   bold_labels() |> 
   italicize_labels()
-
 
 ```
 
@@ -341,12 +427,20 @@ Of 1,560,221 patients admitted to 211 ICUs during the study period, 826,106 (52.
 ### Patient Demographics
 Below are the demographic tables. This table has the 4 AHRF categories (none, mild, moderate, severe) to look at the breakdown of patients within each AHRF category.
 
+::: panel-tabset
+## AHRF Vs No-AHRF
+```{r}
+t1_binary
+```
+
+## AHRF Categories
 ```{r}
 t1
 ```
+:::
 
-### Causes of AHRF
-Below are the causes of AHRF, ordered by the most common.
+### Admission Diagnoses
+Below are the admission diagnoses and the associated AHRF categories, ordered by the most common.
 
 ```{r}
 table_causes <-arf |>  
@@ -368,6 +462,135 @@ table_causes <-arf |>
 
 table_causes
 ```
+### Admission Diagnoses Over Time
+Below are the admission diagnoses trends over time, with categorisation by AHRF severity.
+
+::: panel-tabset
+## Overall
+```{r, warning=FALSE}
+arf |> group_by(IcuAdmitYYYY, ahrf_cause) |>
+  summarise(n = n()) |> 
+  mutate(percent = 100*n/sum(n)) |> 
+  filter(!ahrf_cause=="NA") |> 
+  ggplot(aes(x = IcuAdmitYYYY, y = percent, color = ahrf_cause))+
+  geom_line()+
+  labs(x="Year", y="Proportion of ICU Admission (%)", title="ICU Admission Diagnoses over Time", color = "ICU Admission Diagnosis")+
+  theme_bw() +
+  theme(panel.grid.minor.x = element_blank(), panel.grid.minor.y = element_blank())+
+  guides(color=guide_legend(override.aes=list(fill=NA)))+
+  scale_y_continuous(breaks = seq(0, 50, by = 5))+
+  ylim(0,50)
+```
+
+## Cardiac Surgery
+```{r, warning=FALSE}
+arf |> group_by(IcuAdmitYYYY, pf_cat, ahrf_cause) |>
+  summarise(n = n()) |> 
+  mutate(percent = 100*n/sum(n)) |> 
+  filter(ahrf_cause=="Cardiac Surgery") |>
+  ggplot(aes(x = IcuAdmitYYYY, y = percent, color = pf_cat))+
+  geom_line()+
+  labs(x="Year", y="Proportion of Disease-Specific Admission (%)", title="ICU Admission After Cardiac Surgery over Time", subtitle = "by AHRF Category", color = "AHRF Category")+
+  theme_bw() +
+  theme(panel.grid.minor.x = element_blank(), panel.grid.minor.y = element_blank())+
+  guides(color=guide_legend(override.aes=list(fill=NA)))+
+  scale_y_continuous(breaks = seq(0, 60, by = 5))+
+  ylim(0,60)
+```
+
+## Respiratory Disease
+```{r, warning=FALSE}
+arf |> group_by(IcuAdmitYYYY, pf_cat, ahrf_cause) |>
+  summarise(n = n()) |> 
+  mutate(percent = 100*n/sum(n)) |> 
+  filter(ahrf_cause=="Respiratory Disease") |>
+  ggplot(aes(x = IcuAdmitYYYY, y = percent, color = pf_cat))+
+  geom_line()+
+  labs(x="Year", y="Proportion of Disease-Specific Admission (%)", title="ICU Admission With Respiratory Disease over Time", subtitle = "by AHRF Category", color = "AHRF Category")+
+  theme_bw() +
+  theme(panel.grid.minor.x = element_blank(), panel.grid.minor.y = element_blank())+
+  guides(color=guide_legend(override.aes=list(fill=NA)))+
+  scale_y_continuous(breaks = seq(0, 35, by = 5))+
+  ylim(0,35)
+```
+## Cardiovascular Disease
+```{r, warning=FALSE}
+arf |> group_by(IcuAdmitYYYY, pf_cat, ahrf_cause) |>
+  summarise(n = n()) |> 
+  mutate(percent = 100*n/sum(n)) |> 
+  filter(ahrf_cause=="Cardiovascular Disease") |>
+  ggplot(aes(x = IcuAdmitYYYY, y = percent, color = pf_cat))+
+  geom_line()+
+  labs(x="Year", y="Proportion of Disease-Specific Admission (%)", title="ICU Admission With Cardiovascular Disease over Time", subtitle = "by AHRF Category", color = "AHRF Category")+
+  theme_bw() +
+  theme(panel.grid.minor.x = element_blank(), panel.grid.minor.y = element_blank())+
+  guides(color=guide_legend(override.aes=list(fill=NA)))+
+  scale_y_continuous(breaks = seq(0, 30, by = 5))+
+  ylim(0,30)
+```
+## Sepsis
+```{r, warning=FALSE}
+arf |> group_by(IcuAdmitYYYY, pf_cat, ahrf_cause) |>
+  summarise(n = n()) |> 
+  mutate(percent = 100*n/sum(n)) |> 
+  filter(ahrf_cause=="Sepsis") |>
+  ggplot(aes(x = IcuAdmitYYYY, y = percent, color = pf_cat))+
+  geom_line()+
+  labs(x="Year", y="Proportion of Disease-Specific Admission (%)", title="ICU Admission With Sepsis over Time", subtitle = "by AHRF Category", color = "AHRF Category")+
+  theme_bw() +
+  theme(panel.grid.minor.x = element_blank(), panel.grid.minor.y = element_blank())+
+  guides(color=guide_legend(override.aes=list(fill=NA)))+
+  scale_y_continuous(breaks = seq(0, 20, by = 5))+
+  ylim(0,20)
+```
+
+## Gastrointestinal Surgery
+```{r, warning=FALSE}
+arf |> group_by(IcuAdmitYYYY, pf_cat, ahrf_cause) |>
+  summarise(n = n()) |> 
+  mutate(percent = 100*n/sum(n)) |> 
+  filter(ahrf_cause=="Gastrointestinal Surgery") |>
+  ggplot(aes(x = IcuAdmitYYYY, y = percent, color = pf_cat))+
+  geom_line()+
+  labs(x="Year", y="Proportion of Disease-Specific Admission (%)", title="ICU Admission After Gastrointestinal Surgery over Time", subtitle = "by AHRF Category", color = "AHRF Category")+
+  theme_bw() +
+  theme(panel.grid.minor.x = element_blank(), panel.grid.minor.y = element_blank())+
+  guides(color=guide_legend(override.aes=list(fill=NA)))+
+  scale_y_continuous(breaks = seq(0, 20, by = 5))+
+  ylim(0,20)
+```
+
+## Other Non-Operative
+```{r, warning=FALSE}
+arf |> group_by(IcuAdmitYYYY, pf_cat, ahrf_cause) |>
+  summarise(n = n()) |> 
+  mutate(percent = 100*n/sum(n)) |> 
+  filter(ahrf_cause=="Other Non-Operative") |>
+  ggplot(aes(x = IcuAdmitYYYY, y = percent, color = pf_cat))+
+  geom_line()+
+  labs(x="Year", y="Proportion of Disease-Specific Admission (%)", title="ICU Admission With Other Non-Operative over Time", subtitle = "by AHRF Category", color = "AHRF Category")+
+  theme_bw() +
+  theme(panel.grid.minor.x = element_blank(), panel.grid.minor.y = element_blank())+
+  guides(color=guide_legend(override.aes=list(fill=NA)))+
+  scale_y_continuous(breaks = seq(0, 30, by = 5))+
+  ylim(0,30)
+```
+## Other Post-Operative
+```{r, warning=FALSE}
+arf |> group_by(IcuAdmitYYYY, pf_cat, ahrf_cause) |>
+  summarise(n = n()) |> 
+  mutate(percent = 100*n/sum(n)) |> 
+  filter(ahrf_cause=="Other Post-Operative") |>
+  ggplot(aes(x = IcuAdmitYYYY, y = percent, color = pf_cat))+
+  geom_line()+
+  labs(x="Year", y="Proportion of Disease-Specific Admission (%)", title="ICU Admission With Other Post-Operative over Time", subtitle = "by AHRF Category", color = "AHRF Category")+
+  theme_bw() +
+  theme(panel.grid.minor.x = element_blank(), panel.grid.minor.y = element_blank())+
+  guides(color=guide_legend(override.aes=list(fill=NA)))+
+  scale_y_continuous(breaks = seq(0, 40, by = 5))+
+  ylim(0,40)
+```
+:::
 
 ### Admissions to ICU with AHRF Over Time
 The proportion of AHRF admissions to ICU was 53.6% (559/1,042) in 2005 and 52.0% (66521/127,934) in 2022. The proportion of patients admitted with mild AHRF to ICU was 27.2% (283/1,042) in 2005 and 27.6% (35,306/127,934) in 2022. The proportion of patients admitted with moderate AHRF to ICU was 20.6% (215/1,042) in 2005 and 19.9% (25,508/127,934) in 2022. The proportion of patients admitted with severe AHRF to ICU was 5.9% (61/1,042) in 2005 and 4.5% (5,707/127,934) in 2022.
@@ -410,10 +633,43 @@ arf |> group_by(IcuAdmitYYYY,pf_cat) |>
 ### Unadjusted Outcomes
 
 #### All Outcomes
-Below are the unadjusted outcomes for the different AHRF categories. The first table has the 4 categories (none, mild, moderate, severe) and the second table has the additional subgroup (moderate-severe).
+Below are the unadjusted outcomes for the different AHRF categories. The first table contains the outcomes for patients with AHRF compared to those without it, and the second table has the 4 categories (none, mild, moderate, severe).
 ```{r, include=FALSE, cache.lazy=FALSE}
+# Generate Table of all outcomes- AHRF vs No-AHRF
+t_outcome_binary <- arf |> 
+  mutate(icu_los_med = icu_los,
+         icu_los_mean = icu_los,
+         hosp_los_med = hosp_los,
+         hosp_los_mean = hosp_los) |> 
+  select(DIED_HOSP, DIED_ICU, icu_los_mean, icu_los_med, hosp_los_mean, hosp_los_med, hosp_dc_dest, AHRF) |>  
+    tbl_summary(by = AHRF, missing = "no",
+            label = list(
+              DIED_HOSP = "Hospital Mortality",
+              DIED_ICU = "ICU Mortality",
+              icu_los_mean = "Mean ICU Length of Stay in Days (SD)",
+              hosp_los_mean = "Mean Hospital Length of Stay in Days (SD)",
+              icu_los_med = "Median ICU Length of Stay in Days (IQR)",
+              hosp_los_med = "Median Hospital Length of Stay in Days (IQR)",
+              hosp_dc_dest = "Hospital Discharge Destination"),
+            value = list(
+              DIED_HOSP ~ "1",
+              DIED_ICU ~ "1"),
+            statistic = list(
+              DIED_HOSP ~ "{n} ({p}%)",
+              DIED_ICU ~ "{n} ({p}%)",
+              icu_los_mean ~ "{mean} ({sd})",
+              hosp_los_mean ~ "{mean} ({sd})",
+              icu_los_med ~ "{median} ({p25}-{p75})",
+              hosp_los_med ~ "{median} ({p25}-{p75})")) |> 
+  modify_header(stat_1 = "**No-AHRF (PF >300)**", stat_2 = "**AHRF (PF <300)**") |> 
+  modify_spanning_header(all_stat_cols() ~ "**Acute Hypoxaemic Respiratory Failure**") |>
+  bold_labels() |> 
+  add_overall(col_label = "**Overall**", last = FALSE) |> 
+  remove_row_type(variables = hosp_dc_dest, type = "level", level_value = "Died")
 
-# Generate Table of all outcomes
+
+
+# Generate Table of all outcomes- AHRF Categories
 t_outcome <- arf |> 
   mutate(icu_los_med = icu_los,
          icu_los_mean = icu_los,
@@ -447,9 +703,16 @@ t_outcome <- arf |>
 
 ```
 
+::: panel-tabset
+## AHRF vs No-AHRF
+```{r}
+t_outcome_binary
+```
+## AHRF Categories
 ```{r}
 t_outcome
 ```
+:::
 
 #### Unadjusted In-Hospital Mortality and Continuous PaO~2~:FiO~2~ Ratio
 The figures below represent the unadjusted outcomes.
@@ -594,6 +857,14 @@ arf |> group_by(IcuAdmitYYYY, pf_cat, hosp_dc_dest) |>
 
 ### Adjusted Outcomes
 ```{r, cache.lazy=FALSE, include=FALSE, warnings=FALSE}
+# Priamry Outcome of AHRF vs No-AHRF MLM
+arf_binary <- glmer(as.numeric(DIED_HOSP) ~ 0 + AHRF +  FRAILTY + SMOKINGINTENSITY + Apache3Score + CHR_RESP + CHR_CVS + (1|SiteID),
+                             family = binomial(link = "logit"), data = arf, nAGQ = 0,
+                             glmerControl(optimizer = "bobyqa", optCtrl = list(maxfun = 2e5)))
+
+arf_binary_tidy <-broom.mixed::tidy(arf_binary, conf.int = T, exponentiate=TRUE)
+
+arf_binary_ate <- avg_comparisons(arf_binary, variables = "AHRF", comparison="difference", type="response")
 
 # Run MLM
 arf_freqmodel <- glmer(as.numeric(DIED_HOSP) ~ 0 + pf_cont +  FRAILTY + SMOKINGINTENSITY + Apache3Score + CHR_RESP + CHR_CVS + (1|SiteID),
@@ -689,6 +960,10 @@ mort_pf_adj_values <-
 
 
 ```
+#### Primary Outcome: Conditional Probability of In-Hospital Mortality and AHRF Status
+Adjusted mortality
+
+
 #### Primary Outcome: Conditional Probability of In-Hospital Mortality and Continuous PaO~2~:FiO~2~ Ratio
 Adjusted mortality increased as PaO~2~:FiO~2~ Ratio decreased (Adjusted ARR `r hosp_mort_pf_arr$hosp_mort_pf_arr_mean` (95%CI: `r hosp_mort_pf_arr$hosp_mort_pf_arr_lci` - `r hosp_mort_pf_arr$hosp_mort_pf_arr_uci`)). This means that for every decrease of 100 in the PaO~2~:FiO~2~ Ratio, the conditional hospital mortality will increase by `r -hosp_mort_pf_arr$hosp_mort_pf_arr_mean`%. However, this effect is non-linear, as seen from the figure below.
 
@@ -738,9 +1013,12 @@ hosp_mort_time <- ggplot(data=arf, aes(x=IcuAdmitYYYY, y=pred_hosp_mort))+
 # Calculate ARR (95% CI) from smoothed time trend
 hosp_mort_arr <- arr(hosp_mort_time)
 
+# Calculate Comparison between AHRF categories.
+hosp_mort_avgcomp <- avg_comparisons(arf_model_hosp_mort_cat, variables = "pf_cat", comparison="difference", type="response")
+
 ```
 ## Hospital Mortality
-Overall hospital mortality is decreasing over time. Over the study period, there was a reduction in adjusted hospital mortality from `r hosp_mort_arr$mean_2005` (95% CI: `r hosp_mort_arr$conf.low_2005` - `r hosp_mort_arr$conf.high_2005`) to `r hosp_mort_arr$mean_2022` (95% CI: `r hosp_mort_arr$conf.low_2022` - `r hosp_mort_arr$conf.high_2022`). This was an absolute risk reduction (ARR) of `r hosp_mort_arr$outcome_arr` (95% CI: `r hosp_mort_arr$outcome_arr_conf.low` - `r hosp_mort_arr$outcome_arr_conf.high`). This change in outcome between the categories of AHRF over time were all significant (all p<0.001 for interactions compared to None category of AHRF).
+Overall hospital mortality is decreasing over time. Over the study period, there was a reduction in adjusted hospital mortality from `r hosp_mort_arr$mean_2005` (95% CI: `r hosp_mort_arr$conf.low_2005` - `r hosp_mort_arr$conf.high_2005`) to `r hosp_mort_arr$mean_2022` (95% CI: `r hosp_mort_arr$conf.low_2022` - `r hosp_mort_arr$conf.high_2022`). This was an absolute risk reduction (ARR) of `r hosp_mort_arr$outcome_arr` (95% CI: `r hosp_mort_arr$outcome_arr_conf.low` - `r hosp_mort_arr$outcome_arr_conf.high`). This change in outcome for each AHRF category over time were all significant (all p<0.001 for interactions compared to None category of AHRF), and the comparisons between each category and no-AHRF were all significant (p<0.001).
 
 ```{r}
 hosp_mort_time
@@ -1041,9 +1319,6 @@ time_death_timecat_mod_strata <- coxph(Surv(time, status) ~ strata(time_cat) +  
 time_death_timecat_sev <- coxph(Surv(time, status) ~ time_cat +  FRAILTY + SMOKINGINTENSITY + Apache3Score + CHR_RESP + CHR_CVS + frailty(SiteID), data=arf_sev)
 time_death_timecat_sev_strata <- coxph(Surv(time, status) ~ strata(time_cat) +  FRAILTY + SMOKINGINTENSITY + Apache3Score + CHR_RESP + CHR_CVS + frailty(SiteID), data=arf_sev)
 
-
-
-
 # Generate Table of Cox-PH Model Output
 table_cox <- time_death |>
   tbl_regression(exp=TRUE, 
@@ -1208,7 +1483,7 @@ time_death_timecat_sev_km
 ```
 :::
 
-### Subgroup Analysis (Adjusted Analysis)
+### Subgroup Analysis (Adjusted Analysis)- Graphical Analysis
 
 ::: panel-tabset
 ## IPPV Any Time
@@ -1347,6 +1622,129 @@ ggplot(aes(x=pf_cont, y=pred_freqmodel, color = TREAT_LMT))+
   guides(color=guide_legend(override.aes=list(fill=NA)))
 ```
 :::
+
+### Subgroup Analysis (Adjusted Analysis)- Non-Graphical Analysis
+```{r}
+# IPPV Vs No-IPPV
+arf_ippv <- arf |> filter(!(INV_IND== "NA")) 
+arf_ippv <- arf |> mutate(INV_IND = case_when(
+  INV_IND == 0 ~ "No",
+  INV_IND == 1 ~ "Yes"))
+
+# Run MLM
+arf_model_ippv <- glmer(DIED_HOSP ~ 0 + IcuAdmitYYYY + pf_cont + INV_IND + FRAILTY + Apache3Score + CHR_RESP + CHR_CVS + (1|SiteID),
+                             family = binomial(link = "logit"), data = arf_ippv, nAGQ = 0,
+                             glmerControl(optimizer = "bobyqa", optCtrl = list(maxfun = 2e5)))
+# G-computation
+ippv_avgcomp <- avg_comparisons(arf_model_ippv, variables = "INV_IND", comparison="difference", type="response")
+
+# NIV Vs No-NIV
+arf_niv <- arf |> filter(!(NIV_IND== "NULL"))
+# Run MLM
+arf_model_niv <- glmer(DIED_HOSP ~ 0 + IcuAdmitYYYY + pf_cont + NIV_IND + FRAILTY + Apache3Score + CHR_RESP + CHR_CVS + (1|SiteID),
+                             family = binomial(link = "logit"), data = arf_niv, nAGQ = 0,
+                             glmerControl(optimizer = "bobyqa", optCtrl = list(maxfun = 2e5)))
+# G-computation
+niv_avgcomp <- avg_comparisons(arf_model_niv, variables = "NIV_IND", comparison="difference", type="response")
+
+# ECMO Vs No-ECMO
+arf_ecmo <- arf |> filter(!(ECMO_IND== "NULL"))
+# Run MLM
+arf_model_ecmo <- glmer(DIED_HOSP ~ 0 + IcuAdmitYYYY + pf_cont + ECMO_IND + FRAILTY + Apache3Score + CHR_RESP + CHR_CVS + (1|SiteID),
+                             family = binomial(link = "logit"), data = arf_ecmo, nAGQ = 0,
+                             glmerControl(optimizer = "bobyqa", optCtrl = list(maxfun = 2e5)))
+# G-computation
+ecmo_avgcomp <- avg_comparisons(arf_model_ecmo, variables = "ECMO_IND", comparison="difference", type="response")
+
+# Hospital Type
+# Run MLM
+arf_model_hosptype <- glmer(DIED_HOSP ~ 0 + IcuAdmitYYYY + pf_cont + HospitalClassification + FRAILTY + Apache3Score + CHR_RESP + CHR_CVS + (1|SiteID),
+                             family = binomial(link = "logit"), data = arf, nAGQ = 0,
+                             glmerControl(optimizer = "bobyqa", optCtrl = list(maxfun = 2e5)))
+# G-computation
+hosptype_avgcomp <- avg_comparisons(arf_model_hosptype, variables = "HospitalClassification", comparison="difference", type="response")
+
+# Sex
+# Run MLM
+arf_sex <- arf |> filter(SEX %in% c("Male", "Female"))
+arf_model_sex <- glmer(DIED_HOSP ~ 0 + IcuAdmitYYYY + pf_cont + SEX + FRAILTY + Apache3Score + CHR_RESP + CHR_CVS + (1|SiteID),
+                             family = binomial(link = "logit"), data = arf_sex, nAGQ = 0,
+                             glmerControl(optimizer = "bobyqa", optCtrl = list(maxfun = 2e5)))
+# G-computation
+sex_avgcomp <- avg_comparisons(arf_model_sex, variables = list(SEX = c("Male", "Female")), comparison="difference", type="response")
+
+# Age Categories
+# Run MLM
+arf_model_age <- glmer(DIED_HOSP ~ 0 + IcuAdmitYYYY + pf_cont + age_cat + FRAILTY + Apache3Score + CHR_RESP + CHR_CVS + (1|SiteID),
+                             family = binomial(link = "logit"), data = arf, nAGQ = 0,
+                             glmerControl(optimizer = "bobyqa", optCtrl = list(maxfun = 2e5)))
+# G-computation
+age_avgcomp <- avg_comparisons(arf_model_age, variables = "age_cat", comparison="difference", type="response")
+
+# Admission Diagnoses
+# Refactor to make cardiac surgery the comparitor
+arf_diag <- arf |>  mutate(ap3diag_min = factor(ap3diag_min, levels = c("Cardiac Surgery", "Medical", "Post-Operative", "Sepsis", "Trauma/Neurosurgery")))
+# Run MLM
+arf_model_diag <- glmer(DIED_HOSP ~ 0 + IcuAdmitYYYY + pf_cont + ap3diag_min + FRAILTY + Apache3Score + CHR_RESP + CHR_CVS + (1|SiteID),
+                             family = binomial(link = "logit"), data = arf_diag, nAGQ = 0,
+                             glmerControl(optimizer = "bobyqa", optCtrl = list(maxfun = 2e5)))
+# G-computation
+diag_avgcomp <- avg_comparisons(arf_model_diag, variables = "ap3diag_min", comparison="difference", type="response")
+
+# Treatment Limitations
+arf_rxlim <- arf |> mutate(TREAT_LMT = case_when(
+  TREAT_LMT == 1 ~ "No",
+  TREAT_LMT == 2 ~ "Yes"))
+# Run MLM
+arf_model_Rxlim <- glmer(DIED_HOSP ~ 0 + IcuAdmitYYYY + pf_cont + TREAT_LMT + FRAILTY + Apache3Score + CHR_RESP + CHR_CVS + (1|SiteID),
+                             family = binomial(link = "logit"), data = arf_rxlim, nAGQ = 0,
+                             glmerControl(optimizer = "bobyqa", optCtrl = list(maxfun = 2e5)))
+# G-computation
+rxlim_avgcomp <- avg_comparisons(arf_model_Rxlim, variables = "TREAT_LMT", comparison="difference", type="response")
+
+## Make Table with Results
+# Tabulate Data Function
+table <- function(data){
+  df <- data |> select(Subgroup, contrast, estimate, conf.low, conf.high, p.value)|> 
+    mutate(across(estimate:p.value, ~round(.,4))) |> 
+    reframe(Subgroup, Contrast = contrast, "ATE [95% CI]" = str_c(estimate, " [", conf.low, ", ", conf.high, "]"), "p-value" = p.value)
+}
+
+# Create dataframe
+ippv <- ippv_avgcomp |> mutate(Subgroup = "IPPV Vs No-IPPV") |> table()
+niv <- niv_avgcomp |> mutate(Subgroup = "NIV Vs No-NIV") |> table()
+ecmo <- ecmo_avgcomp |> mutate(Subgroup = "ECMO Vs No-ECMO") |> table()
+hosptype <- hosptype_avgcomp |> mutate(Subgroup = "Hospital Type") |> table()
+sex <- sex_avgcomp |> mutate(Subgroup = "Sex") |> table()
+age <- age_avgcomp |> mutate(Subgroup = "Age Categories") |> table()
+diag <- diag_avgcomp |> mutate(Subgroup = "Admission Diagnoses") |> table()
+rxlim <- rxlim_avgcomp |> mutate(Subgroup = "Treatment Limitations") |> table()
+# Bind all groups
+subgroup_df <- rbind(ippv, niv, ecmo, hosptype, sex, age, diag, rxlim) 
+
+# Create Table
+Subgroup_table <-  subgroup_df |> 
+  group_by(Subgroup, Contrast) |> 
+  gt(groupname_col = c("Subgroup"))|>  
+  tab_stubhead(label = " ") |>  
+  tab_options(
+    row_group.as_column = TRUE,
+    row_group.border.top.width = px(3),
+    row_group.font.weight = "bold",
+    table.border.bottom.width = px(3),
+    table.border.bottom.color = "black",
+    table.border.top.color = "white",
+    heading.border.bottom.color = "black",
+    heading.border.bottom.width = px(3),
+    heading.title.font.weight = "bold") |> 
+  tab_header(title = "Subgroup Analysis")|>
+  opt_align_table_header(align = "left")|> 
+  tab_footnote(footnote = "ATE = Average Treatment Effect")
+
+
+```
+
+
 
 ### Sensitivity Analysis
 #### Different Severity of Illness Scores
