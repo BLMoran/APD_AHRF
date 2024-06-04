@@ -64,8 +64,7 @@ Post-hoc sensitivity analyses were performed on the pre-specified variables of s
 
 ```{r setup, include=FALSE, cache.lazy=FALSE}
 
-library(tidyverse)
-library(data.table)
+library(tidytable)
 library(gtsummary)
 library(lme4)
 library(survival)
@@ -77,10 +76,11 @@ knitr::opts_chunk$set(echo = F, message = F, warning = F, error = T,
                       out.width = "90%", dev = "png", dpi = 300, cache = T)
 
 # Import the Data
-arf <- fread("~/Documents/Research/Projects/Current Projects/APD ARF Study/Data/2204_APD.csv")
+#arf <- fread("~/Documents/Research/Projects/Current Projects/APD ARF Study/Data/2204_APD.csv")
 
-# Filter out unwanted columns
-arf <- arf |> select(-c(CountryCode, IcuAdmitYYYYMM, ICUAdmitFinYr))
+# Import the Data
+arf <- fread("~/Documents/Research/Projects/Current Projects/APD ARF Study/Data/2204_APD.csv",
+             select = c("SiteID", "HospitalClassification", "Country", "PatientID", "IcuAdmitYYYY", "SEX", "AGE", "ICU_SRCE", "AP3DIAG", "Apache3Score", "Apache2Score", "SOFA_Score",  "ANZRODRiskOfDeath", "FRAILTY", "DIABETES", "PAO2_ANZ", "FIO2_ANZ", "DIED_HOSP", "DIED_ICU", "ICU_HRS", "HOSP_HRS", "HOSP_OUTCM", "INV_IND", "INV_DAYONE", "ECMO_IND", "NIV_IND", "CHR_RESP", "CHR_CVS", "COVID_pneumonitis_derived", "TRACHE_IND", "SMOKINGINTENSITY", "CHR_LIV", "CHR_REN", "INV_HOURS", "HOSP_AD_DTM", "HOSP_DS_DTM", "TREAT_LMT"))
 
 #==========================================DEMOGRAPHICS==========================================#
 
@@ -172,6 +172,12 @@ arf <- arf |>
 arf <- arf |> 
   mutate(DIABETES = factor(DIABETES, levels = c("None", "Type-1 Diabetes", "Type-2 Diabetes", "Gestational Diabetes", "Secondary Diabetes/Other")))
 
+# Smoking Intensity
+arf <- arf |> 
+  mutate(SMOKINGINTENSITY = as.numeric(SMOKINGINTENSITY)) |> 
+  mutate(SMOKINGINTENSITY = replace_na(SMOKINGINTENSITY, 0))
+
+
 #==========================================EXPOSURE==========================================#
 
 # Calculate Continuous PaO2:FiO2
@@ -247,7 +253,7 @@ arf <- arf |>  mutate(icu_los = as.numeric(ICU_HRS)/24) |> select(-ICU_HRS)
 arf <- arf |>  mutate(hosp_los = as.numeric(HOSP_HRS)/24) |> select(-HOSP_HRS)
 
 # Change Site ID to Factor Variable for GLMM #
-arf$SiteID <- as.factor(arf$SiteID)
+#arf$SiteID <- as.factor(arf$SiteID)
 
 # Rename Hospital Discharge Destination (HOSP_OUTCM)
 arf <- arf |> 
@@ -299,7 +305,7 @@ arf <- arf |>
       NIV_IND == "2"~ "No",
       NIV_IND == "1" ~ "Yes"))
 
-# Rename Variables for NIV_IND
+# Rename Variables for ECMO_IND
 arf <- arf |> 
   mutate(ECMO_IND = case_when(
       ECMO_IND == "2"~ "No",
@@ -316,7 +322,7 @@ arf <- arf[complete.cases(arf$AGE),]
 arf <- arf[complete.cases(arf$icu_admit_source),]
 arf <- arf[complete.cases(arf$pf_cont),]
 arf <- arf[complete.cases(arf$SEX),]
-arf <- arf[complete.cases(arf$FRAILTY),]
+#arf <- arf[complete.cases(arf$FRAILTY),]
 arf <- arf[complete.cases(arf$CHR_RESP),]
 arf <- arf[complete.cases(arf$CHR_CVS),]
 
@@ -325,6 +331,7 @@ arf <- arf |>
   filter(!(pf_cont > 700))
 
 #==========================================TABLE 1==========================================#
+library(tidyverse)
 # Count row numbers to get patient numbers in table 1
 arf <- arf |>  mutate(PatientID = row_number()) |>  
   group_by(PatientID) |> 
@@ -858,7 +865,7 @@ arf |> group_by(IcuAdmitYYYY, pf_cat, hosp_dc_dest) |>
 ### Adjusted Outcomes
 ```{r, cache.lazy=FALSE, include=FALSE, warnings=FALSE}
 # Priamry Outcome of AHRF vs No-AHRF MLM
-arf_binary <- glmer(as.numeric(DIED_HOSP) ~ 0 + AHRF +  FRAILTY + SMOKINGINTENSITY + Apache3Score + CHR_RESP + CHR_CVS + (1|SiteID),
+arf_binary <- glmer(DIED_HOSP ~ 0 + AHRF  + SMOKINGINTENSITY + Apache3Score + CHR_RESP + CHR_CVS + (1|SiteID),
                              family = binomial(link = "logit"), data = arf, nAGQ = 0,
                              glmerControl(optimizer = "bobyqa", optCtrl = list(maxfun = 2e5)))
 
@@ -867,7 +874,7 @@ arf_binary_tidy <-broom.mixed::tidy(arf_binary, conf.int = T, exponentiate=TRUE)
 arf_binary_ate <- avg_comparisons(arf_binary, variables = "AHRF", comparison="difference", type="response")
 
 # Run MLM
-arf_freqmodel <- glmer(as.numeric(DIED_HOSP) ~ 0 + pf_cont +  FRAILTY + SMOKINGINTENSITY + Apache3Score + CHR_RESP + CHR_CVS + (1|SiteID),
+arf_freqmodel <- glmer(DIED_HOSP ~ 0 + pf_cont  + SMOKINGINTENSITY + Apache3Score + CHR_RESP + CHR_CVS + (1|SiteID),
                              family = binomial(link = "logit"), data = arf, nAGQ = 0,
                              glmerControl(optimizer = "bobyqa", optCtrl = list(maxfun = 2e5)))
 
@@ -985,14 +992,14 @@ The following details the secondary hospital outcomes both descriptively and gra
 ::: panel-tabset
 ```{r, cache.lazy=FALSE, include=FALSE}
 # Run MLM
-arf_model_hosp_mort <- glmer(as.numeric(DIED_HOSP) ~ 0 + IcuAdmitYYYY + pf_cont +  FRAILTY + SMOKINGINTENSITY + Apache3Score + CHR_RESP + CHR_CVS + (1|SiteID),
+arf_model_hosp_mort <- glmer(DIED_HOSP ~ 0 + IcuAdmitYYYY + pf_cont  + SMOKINGINTENSITY + Apache3Score + CHR_RESP + CHR_CVS + (1|SiteID),
                              family = binomial(link = "logit"), data = arf, nAGQ = 0,
                              glmerControl(optimizer = "bobyqa", optCtrl = list(maxfun = 2e5)))
 
 arf_model_hosp_mort_tidy <-broom.mixed::tidy(arf_model_hosp_mort, conf.int = T, exponentiate=TRUE)
 
 # Run MLM for pg_cat interaction term
-arf_model_hosp_mort_cat <- glmer(as.numeric(DIED_HOSP) ~ 0 + IcuAdmitYYYY:pf_cat + IcuAdmitYYYY + pf_cat +  FRAILTY + SMOKINGINTENSITY + Apache3Score + CHR_RESP + CHR_CVS + (1|SiteID),
+arf_model_hosp_mort_cat <- glmer(as.numeric(DIED_HOSP) ~ 0 + IcuAdmitYYYY:pf_cat + IcuAdmitYYYY + pf_cat + SMOKINGINTENSITY + Apache3Score + CHR_RESP + CHR_CVS + (1|SiteID),
                              family = binomial(link = "logit"), data = arf, nAGQ = 0,
                              glmerControl(optimizer = "bobyqa", optCtrl = list(maxfun = 2e5)))
 
@@ -1030,14 +1037,14 @@ hosp_mort_time
 arf_icu_mort <- arf[complete.cases(arf$DIED_ICU),]
   
 # Run MLM
-arf_model_icu_mort <- glmer(as.numeric(DIED_ICU) ~ 0 + IcuAdmitYYYY + pf_cont +  FRAILTY + SMOKINGINTENSITY + Apache3Score + CHR_RESP + CHR_CVS + (1|SiteID),
+arf_model_icu_mort <- glmer(as.numeric(DIED_ICU) ~ 0 + IcuAdmitYYYY + pf_cont  + SMOKINGINTENSITY + Apache3Score + CHR_RESP + CHR_CVS + (1|SiteID),
                              family = binomial(link = "logit"), data = arf_icu_mort, nAGQ = 0,
                              glmerControl(optimizer = "bobyqa", optCtrl = list(maxfun = 2e5)))
 
 arf_model_icu_mort_tidy <-broom.mixed::tidy(arf_model_icu_mort, conf.int = T, exponentiate=TRUE)
 
 # Run MLM for pg_cat interaction term
-arf_model_icu_mort_cat <- glmer(as.numeric(DIED_ICU) ~ 0 + IcuAdmitYYYY:pf_cat + IcuAdmitYYYY + pf_cat + FRAILTY + SMOKINGINTENSITY + Apache3Score + CHR_RESP + CHR_CVS + (1|SiteID),
+arf_model_icu_mort_cat <- glmer(as.numeric(DIED_ICU) ~ 0 + IcuAdmitYYYY:pf_cat + IcuAdmitYYYY + pf_cat + SMOKINGINTENSITY + Apache3Score + CHR_RESP + CHR_CVS + (1|SiteID),
                              family = binomial(link = "logit"), data = arf_icu_mort, nAGQ = 0,
                              glmerControl(optimizer = "bobyqa", optCtrl = list(maxfun = 2e5)))
 
@@ -1070,13 +1077,13 @@ icu_mort_time
 arf_icu_los <- arf[complete.cases(arf$icu_los),]
 
 # Run MLM
-arf_model_icu_los <- lmer(icu_los ~ 0 + IcuAdmitYYYY + pf_cont +  FRAILTY + SMOKINGINTENSITY + Apache3Score + CHR_RESP + CHR_CVS + (1|SiteID),
+arf_model_icu_los <- lmer(icu_los ~ 0 + IcuAdmitYYYY + pf_cont  + SMOKINGINTENSITY + Apache3Score + CHR_RESP + CHR_CVS + (1|SiteID),
                             data = arf_icu_los)
 
 arf_model_icu_los_tidy <-broom::tidy(arf_model_icu_los, conf.int = T)
 
 # Run MLM for pg_cat interaction term
-arf_model_icu_los_cat <- lmer(icu_los ~ 0 + IcuAdmitYYYY:pf_cat + IcuAdmitYYYY + pf_cat +  FRAILTY + SMOKINGINTENSITY + Apache3Score + CHR_RESP + CHR_CVS + (1|SiteID),
+arf_model_icu_los_cat <- lmer(icu_los ~ 0 + IcuAdmitYYYY:pf_cat + IcuAdmitYYYY + pf_cat  + SMOKINGINTENSITY + Apache3Score + CHR_RESP + CHR_CVS + (1|SiteID),
                             data = arf_icu_los)
 
 arf_model_icu_los_cat_tidy <-broom::tidy(arf_model_icu_los_cat, conf.int = T)
@@ -1108,13 +1115,13 @@ icu_los_time
 arf_hosp_los <- arf[complete.cases(arf$hosp_los),]
 
 # Run MLM
-arf_model_hosp_los <- lmer(hosp_los ~ 0 + IcuAdmitYYYY + pf_cont +  FRAILTY + SMOKINGINTENSITY + Apache3Score + CHR_RESP + CHR_CVS + (1|SiteID),
+arf_model_hosp_los <- lmer(hosp_los ~ 0 + IcuAdmitYYYY + pf_cont  + SMOKINGINTENSITY + Apache3Score + CHR_RESP + CHR_CVS + (1|SiteID),
                             data = arf_hosp_los)
 
 arf_model_hosp_los_tidy <-broom::tidy(arf_model_hosp_los, conf.int = T)
 
 # Run MLM for pg_cat interaction term
-arf_model_hosp_los_cat <- lmer(hosp_los ~ 0 + IcuAdmitYYYY:pf_cat + IcuAdmitYYYY + pf_cat +  FRAILTY + SMOKINGINTENSITY + Apache3Score + CHR_RESP + CHR_CVS + (1|SiteID),
+arf_model_hosp_los_cat <- lmer(hosp_los ~ 0 + IcuAdmitYYYY:pf_cat + IcuAdmitYYYY + pf_cat  + SMOKINGINTENSITY + Apache3Score + CHR_RESP + CHR_CVS + (1|SiteID),
                             data = arf_hosp_los)
 
 arf_model_hosp_los_cat_tidy <-broom::tidy(arf_model_hosp_los_cat, conf.int = T)
@@ -1150,14 +1157,14 @@ arf <- arf |>
 arf_dc_home <- arf[complete.cases(arf$dc_home),]
 
 # Run MLM
-arf_model_dc_home <- glmer(dc_home ~ 0 + IcuAdmitYYYY + pf_cont +  FRAILTY + SMOKINGINTENSITY + Apache3Score + CHR_RESP + CHR_CVS + (1|SiteID),
+arf_model_dc_home <- glmer(dc_home ~ 0 + IcuAdmitYYYY + pf_cont  + SMOKINGINTENSITY + Apache3Score + CHR_RESP + CHR_CVS + (1|SiteID),
                              family = binomial(link = "logit"), data = arf_dc_home, nAGQ = 0,
                              glmerControl(optimizer = "bobyqa", optCtrl = list(maxfun = 2e5)))
 
 arf_model_dc_home_tidy <-broom.mixed::tidy(arf_model_dc_home, conf.int = T, exponentiate=TRUE)
 
 # Run MLM for pg_cat interaction term
-arf_model_dc_home_cat <- glmer(dc_home ~ 0 + IcuAdmitYYYY:pf_cat + IcuAdmitYYYY + pf_cat +  FRAILTY + SMOKINGINTENSITY + Apache3Score + CHR_RESP + CHR_CVS + (1|SiteID),
+arf_model_dc_home_cat <- glmer(dc_home ~ 0 + IcuAdmitYYYY:pf_cat + IcuAdmitYYYY + pf_cat  + SMOKINGINTENSITY + Apache3Score + CHR_RESP + CHR_CVS + (1|SiteID),
                              family = binomial(link = "logit"), data = arf_dc_home, nAGQ = 0,
                              glmerControl(optimizer = "bobyqa", optCtrl = list(maxfun = 2e5)))
 
@@ -1195,14 +1202,14 @@ arf <- arf |>
 arf_dc_nh <- arf[complete.cases(arf$dc_nh),]
 
 # Run MLM
-arf_model_dc_nh <- glmer(dc_nh ~ 0 + IcuAdmitYYYY + pf_cont +  FRAILTY + SMOKINGINTENSITY + Apache3Score + CHR_RESP + CHR_CVS + (1|SiteID),
+arf_model_dc_nh <- glmer(dc_nh ~ 0 + IcuAdmitYYYY + pf_cont  + SMOKINGINTENSITY + Apache3Score + CHR_RESP + CHR_CVS + (1|SiteID),
                              family = binomial(link = "logit"), data = arf_dc_nh, nAGQ = 0,
                              glmerControl(optimizer = "bobyqa", optCtrl = list(maxfun = 2e5)))
 
 arf_model_dc_nh_tidy <-broom.mixed::tidy(arf_model_dc_nh, conf.int = T, exponentiate=TRUE)
 
 # Run MLM for pg_cat interaction term
-arf_model_dc_nh_cat <- glmer(dc_nh ~ 0 + IcuAdmitYYYY:pf_cat + IcuAdmitYYYY + pf_cat +  FRAILTY + SMOKINGINTENSITY + Apache3Score + CHR_RESP + CHR_CVS + (1|SiteID),
+arf_model_dc_nh_cat <- glmer(dc_nh ~ 0 + IcuAdmitYYYY:pf_cat + IcuAdmitYYYY + pf_cat  + SMOKINGINTENSITY + Apache3Score + CHR_RESP + CHR_CVS + (1|SiteID),
                              family = binomial(link = "logit"), data = arf_dc_nh, nAGQ = 0,
                              glmerControl(optimizer = "bobyqa", optCtrl = list(maxfun = 2e5)))
 
@@ -1240,14 +1247,14 @@ arf <- arf |>
 arf_dc_other_hosp <- arf[complete.cases(arf$dc_other_hosp),]
 
 # Run MLM
-arf_model_dc_other_hosp <- glmer(dc_other_hosp ~ 0 + IcuAdmitYYYY + pf_cont +  FRAILTY + SMOKINGINTENSITY + Apache3Score + CHR_RESP + CHR_CVS + (1|SiteID),
+arf_model_dc_other_hosp <- glmer(dc_other_hosp ~ 0 + IcuAdmitYYYY + pf_cont  + SMOKINGINTENSITY + Apache3Score + CHR_RESP + CHR_CVS + (1|SiteID),
                              family = binomial(link = "logit"), data = arf_dc_other_hosp, nAGQ = 0,
                              glmerControl(optimizer = "bobyqa", optCtrl = list(maxfun = 2e5)))
 
 arf_model_dc_other_hosp_tidy <-broom.mixed::tidy(arf_model_dc_other_hosp, conf.int = T, exponentiate=TRUE)
 
 # Run MLM for pg_cat interaction term
-arf_model_dc_other_hosp_cat <- glmer(dc_other_hosp ~ 0 + IcuAdmitYYYY:pf_cat + IcuAdmitYYYY + pf_cat +  FRAILTY + SMOKINGINTENSITY + Apache3Score + CHR_RESP + CHR_CVS + (1|SiteID),
+arf_model_dc_other_hosp_cat <- glmer(dc_other_hosp ~ 0 + IcuAdmitYYYY:pf_cat + IcuAdmitYYYY + pf_cat  + SMOKINGINTENSITY + Apache3Score + CHR_RESP + CHR_CVS + (1|SiteID),
                              family = binomial(link = "logit"), data = arf_dc_other_hosp, nAGQ = 0,
                              glmerControl(optimizer = "bobyqa", optCtrl = list(maxfun = 2e5)))
 
@@ -1306,18 +1313,18 @@ arf_mod <- arf |> filter(pf_cat=="Moderate")
 arf_sev <- arf |> filter(pf_cat=="Severe")
 
 # Cox Proportional Hazards Model
-time_death <- coxph(Surv(time, status) ~ pf_cat +  FRAILTY + SMOKINGINTENSITY + Apache3Score + CHR_RESP + CHR_CVS + frailty(SiteID), data=arf)
-time_death_strata <- coxph(Surv(time, status) ~ strata(pf_cat) +  FRAILTY + SMOKINGINTENSITY + Apache3Score + CHR_RESP + CHR_CVS + frailty(SiteID), data=arf)
-time_death_timecat <- coxph(Surv(time, status) ~ time_cat +  FRAILTY + SMOKINGINTENSITY + Apache3Score + CHR_RESP + CHR_CVS + frailty(SiteID), data=arf)
-time_death_timecat_strata <- coxph(Surv(time, status) ~ strata(time_cat) +  FRAILTY + SMOKINGINTENSITY + Apache3Score + CHR_RESP + CHR_CVS + frailty(SiteID), data=arf)
-time_death_timecat_none <- coxph(Surv(time, status) ~ time_cat +  FRAILTY + SMOKINGINTENSITY + Apache3Score + CHR_RESP + CHR_CVS + frailty(SiteID), data = arf_none)
-time_death_timecat_none_strata <- coxph(Surv(time, status) ~ strata(time_cat) +  FRAILTY + SMOKINGINTENSITY + Apache3Score + CHR_RESP + CHR_CVS + frailty(SiteID), data=arf_none)
-time_death_timecat_mild <- coxph(Surv(time, status) ~ time_cat +  FRAILTY + SMOKINGINTENSITY + Apache3Score + CHR_RESP + CHR_CVS + frailty(SiteID), data=arf_mild)
-time_death_timecat_mild_strata <- coxph(Surv(time, status) ~ strata(time_cat) +  FRAILTY + SMOKINGINTENSITY + Apache3Score + CHR_RESP + CHR_CVS + frailty(SiteID), data=arf_mild)
-time_death_timecat_mod <- coxph(Surv(time, status) ~ time_cat +  FRAILTY + SMOKINGINTENSITY + Apache3Score + CHR_RESP + CHR_CVS + frailty(SiteID), data=arf_mod)
-time_death_timecat_mod_strata <- coxph(Surv(time, status) ~ strata(time_cat) +  FRAILTY + SMOKINGINTENSITY + Apache3Score + CHR_RESP + CHR_CVS + frailty(SiteID), data=arf_mod)
-time_death_timecat_sev <- coxph(Surv(time, status) ~ time_cat +  FRAILTY + SMOKINGINTENSITY + Apache3Score + CHR_RESP + CHR_CVS + frailty(SiteID), data=arf_sev)
-time_death_timecat_sev_strata <- coxph(Surv(time, status) ~ strata(time_cat) +  FRAILTY + SMOKINGINTENSITY + Apache3Score + CHR_RESP + CHR_CVS + frailty(SiteID), data=arf_sev)
+time_death <- coxph(Surv(time, status) ~ pf_cat  + SMOKINGINTENSITY + Apache3Score + CHR_RESP + CHR_CVS + frailty(SiteID), data=arf)
+time_death_strata <- coxph(Surv(time, status) ~ strata(pf_cat)  + SMOKINGINTENSITY + Apache3Score + CHR_RESP + CHR_CVS + frailty(SiteID), data=arf)
+time_death_timecat <- coxph(Surv(time, status) ~ time_cat  + SMOKINGINTENSITY + Apache3Score + CHR_RESP + CHR_CVS + frailty(SiteID), data=arf)
+time_death_timecat_strata <- coxph(Surv(time, status) ~ strata(time_cat)  + SMOKINGINTENSITY + Apache3Score + CHR_RESP + CHR_CVS + frailty(SiteID), data=arf)
+time_death_timecat_none <- coxph(Surv(time, status) ~ time_cat  + SMOKINGINTENSITY + Apache3Score + CHR_RESP + CHR_CVS + frailty(SiteID), data = arf_none)
+time_death_timecat_none_strata <- coxph(Surv(time, status) ~ strata(time_cat)  + SMOKINGINTENSITY + Apache3Score + CHR_RESP + CHR_CVS + frailty(SiteID), data=arf_none)
+time_death_timecat_mild <- coxph(Surv(time, status) ~ time_cat  + SMOKINGINTENSITY + Apache3Score + CHR_RESP + CHR_CVS + frailty(SiteID), data=arf_mild)
+time_death_timecat_mild_strata <- coxph(Surv(time, status) ~ strata(time_cat)  + SMOKINGINTENSITY + Apache3Score + CHR_RESP + CHR_CVS + frailty(SiteID), data=arf_mild)
+time_death_timecat_mod <- coxph(Surv(time, status) ~ time_cat  + SMOKINGINTENSITY + Apache3Score + CHR_RESP + CHR_CVS + frailty(SiteID), data=arf_mod)
+time_death_timecat_mod_strata <- coxph(Surv(time, status) ~ strata(time_cat)  + SMOKINGINTENSITY + Apache3Score + CHR_RESP + CHR_CVS + frailty(SiteID), data=arf_mod)
+time_death_timecat_sev <- coxph(Surv(time, status) ~ time_cat  + SMOKINGINTENSITY + Apache3Score + CHR_RESP + CHR_CVS + frailty(SiteID), data=arf_sev)
+time_death_timecat_sev_strata <- coxph(Surv(time, status) ~ strata(time_cat)  + SMOKINGINTENSITY + Apache3Score + CHR_RESP + CHR_CVS + frailty(SiteID), data=arf_sev)
 
 # Generate Table of Cox-PH Model Output
 table_cox <- time_death |>
@@ -1627,21 +1634,19 @@ ggplot(aes(x=pf_cont, y=pred_freqmodel, color = TREAT_LMT))+
 ```{r}
 # IPPV Vs No-IPPV
 arf_ippv <- arf |> filter(!(INV_IND== "NA")) 
-arf_ippv <- arf |> mutate(INV_IND = case_when(
-  INV_IND == 0 ~ "No",
-  INV_IND == 1 ~ "Yes"))
 
 # Run MLM
-arf_model_ippv <- glmer(DIED_HOSP ~ 0 + IcuAdmitYYYY + pf_cont + INV_IND + FRAILTY + Apache3Score + CHR_RESP + CHR_CVS + (1|SiteID),
+arf_model_ippv <- glmer(DIED_HOSP ~ 0 + IcuAdmitYYYY + pf_cont + INV_IND  + Apache3Score + CHR_RESP + CHR_CVS + (1|SiteID),
                              family = binomial(link = "logit"), data = arf_ippv, nAGQ = 0,
                              glmerControl(optimizer = "bobyqa", optCtrl = list(maxfun = 2e5)))
+
 # G-computation
 ippv_avgcomp <- avg_comparisons(arf_model_ippv, variables = "INV_IND", comparison="difference", type="response")
 
 # NIV Vs No-NIV
 arf_niv <- arf |> filter(!(NIV_IND== "NULL"))
 # Run MLM
-arf_model_niv <- glmer(DIED_HOSP ~ 0 + IcuAdmitYYYY + pf_cont + NIV_IND + FRAILTY + Apache3Score + CHR_RESP + CHR_CVS + (1|SiteID),
+arf_model_niv <- glmer(DIED_HOSP ~ 0 + IcuAdmitYYYY + pf_cont + NIV_IND  + Apache3Score + CHR_RESP + CHR_CVS + (1|SiteID),
                              family = binomial(link = "logit"), data = arf_niv, nAGQ = 0,
                              glmerControl(optimizer = "bobyqa", optCtrl = list(maxfun = 2e5)))
 # G-computation
@@ -1650,7 +1655,7 @@ niv_avgcomp <- avg_comparisons(arf_model_niv, variables = "NIV_IND", comparison=
 # ECMO Vs No-ECMO
 arf_ecmo <- arf |> filter(!(ECMO_IND== "NULL"))
 # Run MLM
-arf_model_ecmo <- glmer(DIED_HOSP ~ 0 + IcuAdmitYYYY + pf_cont + ECMO_IND + FRAILTY + Apache3Score + CHR_RESP + CHR_CVS + (1|SiteID),
+arf_model_ecmo <- glmer(DIED_HOSP ~ 0 + IcuAdmitYYYY + pf_cont + ECMO_IND  + Apache3Score + CHR_RESP + CHR_CVS + (1|SiteID),
                              family = binomial(link = "logit"), data = arf_ecmo, nAGQ = 0,
                              glmerControl(optimizer = "bobyqa", optCtrl = list(maxfun = 2e5)))
 # G-computation
@@ -1658,7 +1663,7 @@ ecmo_avgcomp <- avg_comparisons(arf_model_ecmo, variables = "ECMO_IND", comparis
 
 # Hospital Type
 # Run MLM
-arf_model_hosptype <- glmer(DIED_HOSP ~ 0 + IcuAdmitYYYY + pf_cont + HospitalClassification + FRAILTY + Apache3Score + CHR_RESP + CHR_CVS + (1|SiteID),
+arf_model_hosptype <- glmer(DIED_HOSP ~ 0 + IcuAdmitYYYY + pf_cont + HospitalClassification  + Apache3Score + CHR_RESP + CHR_CVS + (1|SiteID),
                              family = binomial(link = "logit"), data = arf, nAGQ = 0,
                              glmerControl(optimizer = "bobyqa", optCtrl = list(maxfun = 2e5)))
 # G-computation
@@ -1667,7 +1672,7 @@ hosptype_avgcomp <- avg_comparisons(arf_model_hosptype, variables = "HospitalCla
 # Sex
 # Run MLM
 arf_sex <- arf |> filter(SEX %in% c("Male", "Female"))
-arf_model_sex <- glmer(DIED_HOSP ~ 0 + IcuAdmitYYYY + pf_cont + SEX + FRAILTY + Apache3Score + CHR_RESP + CHR_CVS + (1|SiteID),
+arf_model_sex <- glmer(DIED_HOSP ~ 0 + IcuAdmitYYYY + pf_cont + SEX  + Apache3Score + CHR_RESP + CHR_CVS + (1|SiteID),
                              family = binomial(link = "logit"), data = arf_sex, nAGQ = 0,
                              glmerControl(optimizer = "bobyqa", optCtrl = list(maxfun = 2e5)))
 # G-computation
@@ -1675,7 +1680,7 @@ sex_avgcomp <- avg_comparisons(arf_model_sex, variables = list(SEX = c("Male", "
 
 # Age Categories
 # Run MLM
-arf_model_age <- glmer(DIED_HOSP ~ 0 + IcuAdmitYYYY + pf_cont + age_cat + FRAILTY + Apache3Score + CHR_RESP + CHR_CVS + (1|SiteID),
+arf_model_age <- glmer(DIED_HOSP ~ 0 + IcuAdmitYYYY + pf_cont + age_cat  + Apache3Score + CHR_RESP + CHR_CVS + (1|SiteID),
                              family = binomial(link = "logit"), data = arf, nAGQ = 0,
                              glmerControl(optimizer = "bobyqa", optCtrl = list(maxfun = 2e5)))
 # G-computation
@@ -1685,7 +1690,7 @@ age_avgcomp <- avg_comparisons(arf_model_age, variables = "age_cat", comparison=
 # Refactor to make cardiac surgery the comparitor
 arf_diag <- arf |>  mutate(ap3diag_min = factor(ap3diag_min, levels = c("Cardiac Surgery", "Medical", "Post-Operative", "Sepsis", "Trauma/Neurosurgery")))
 # Run MLM
-arf_model_diag <- glmer(DIED_HOSP ~ 0 + IcuAdmitYYYY + pf_cont + ap3diag_min + FRAILTY + Apache3Score + CHR_RESP + CHR_CVS + (1|SiteID),
+arf_model_diag <- glmer(DIED_HOSP ~ 0 + IcuAdmitYYYY + pf_cont + ap3diag_min  + Apache3Score + CHR_RESP + CHR_CVS + (1|SiteID),
                              family = binomial(link = "logit"), data = arf_diag, nAGQ = 0,
                              glmerControl(optimizer = "bobyqa", optCtrl = list(maxfun = 2e5)))
 # G-computation
@@ -1696,7 +1701,7 @@ arf_rxlim <- arf |> mutate(TREAT_LMT = case_when(
   TREAT_LMT == 1 ~ "No",
   TREAT_LMT == 2 ~ "Yes"))
 # Run MLM
-arf_model_Rxlim <- glmer(DIED_HOSP ~ 0 + IcuAdmitYYYY + pf_cont + TREAT_LMT + FRAILTY + Apache3Score + CHR_RESP + CHR_CVS + (1|SiteID),
+arf_model_Rxlim <- glmer(DIED_HOSP ~ 0 + IcuAdmitYYYY + pf_cont + TREAT_LMT  + Apache3Score + CHR_RESP + CHR_CVS + (1|SiteID),
                              family = binomial(link = "logit"), data = arf_rxlim, nAGQ = 0,
                              glmerControl(optimizer = "bobyqa", optCtrl = list(maxfun = 2e5)))
 # G-computation
@@ -1764,7 +1769,7 @@ ggplot(data=arf, aes(x=pf_cont, y=pred_freqmodel))+
 ```{r, cache.lazy=FALSE}
 
 # Run MLM
-arf_model_ap2 <- glmer(as.numeric(DIED_HOSP) ~ 0 + pf_cont +  FRAILTY + SMOKINGINTENSITY + Apache3Score + CHR_RESP + CHR_CVS + Apache2Score + (1|SiteID),
+arf_model_ap2 <- glmer(as.numeric(DIED_HOSP) ~ 0 + pf_cont  + SMOKINGINTENSITY + Apache3Score + CHR_RESP + CHR_CVS + Apache2Score + (1|SiteID),
                              family = binomial(link = "logit"), data = arf, nAGQ = 0,
                              glmerControl(optimizer = "bobyqa", optCtrl = list(maxfun = 2e5)))
 
@@ -1784,7 +1789,7 @@ ggplot(data=arf, aes(x=pf_cont, y=pred_ap2))+
 ```{r, cache.lazy=FALSE}
 
 # Run MLM
-arf_model_anzrod <- glmer(as.numeric(DIED_HOSP) ~ 0 + pf_cont +  FRAILTY + SMOKINGINTENSITY + Apache3Score + CHR_RESP + CHR_CVS + ANZRODRiskOfDeath + (1|SiteID),
+arf_model_anzrod <- glmer(as.numeric(DIED_HOSP) ~ 0 + pf_cont  + SMOKINGINTENSITY + Apache3Score + CHR_RESP + CHR_CVS + ANZRODRiskOfDeath + (1|SiteID),
                              family = binomial(link = "logit"), data = arf, nAGQ = 0,
                              glmerControl(optimizer = "bobyqa", optCtrl = list(maxfun = 2e5)))
 
@@ -1803,7 +1808,7 @@ ggplot(data=arf, aes(x=pf_cont, y=pred_anzrod))+
 ## SOFA
 ```{r, cache.lazy=FALSE}
 # Run MLM
-arf_model_sofa <- glmer(as.numeric(DIED_HOSP) ~ 0 + pf_cont +  FRAILTY + SMOKINGINTENSITY + Apache3Score + CHR_RESP + CHR_CVS + SOFA_Score + (1|SiteID),
+arf_model_sofa <- glmer(as.numeric(DIED_HOSP) ~ 0 + pf_cont  + SMOKINGINTENSITY + Apache3Score + CHR_RESP + CHR_CVS + SOFA_Score + (1|SiteID),
                              family = binomial(link = "logit"), data = arf, nAGQ = 0,
                              glmerControl(optimizer = "bobyqa", optCtrl = list(maxfun = 2e5)))
 
@@ -1836,7 +1841,7 @@ arf_12hvent <- arf |>
   filter(INV_HOURS>12)
 
 # Run MLM
-arf_freqmodel <- glmer(as.numeric(DIED_HOSP) ~ 0 + pf_cont +  FRAILTY + SMOKINGINTENSITY + CHR_RESP + CHR_CVS  + Apache3Score + (1|SiteID),
+arf_freqmodel <- glmer(as.numeric(DIED_HOSP) ~ 0 + pf_cont  + SMOKINGINTENSITY + CHR_RESP + CHR_CVS  + Apache3Score + (1|SiteID),
                              family = binomial(link = "logit"), data = arf_12hvent, nAGQ = 0,
                              glmerControl(optimizer = "bobyqa", optCtrl = list(maxfun = 2e5)))
 
