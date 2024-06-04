@@ -76,9 +76,6 @@ knitr::opts_chunk$set(echo = F, message = F, warning = F, error = T,
                       out.width = "90%", dev = "png", dpi = 300, cache = T)
 
 # Import the Data
-#arf <- fread("~/Documents/Research/Projects/Current Projects/APD ARF Study/Data/2204_APD.csv")
-
-# Import the Data
 arf <- fread("~/Documents/Research/Projects/Current Projects/APD ARF Study/Data/2204_APD.csv",
              select = c("SiteID", "HospitalClassification", "Country", "PatientID", "IcuAdmitYYYY", "SEX", "AGE", "ICU_SRCE", "AP3DIAG", "Apache3Score", "Apache2Score", "SOFA_Score",  "ANZRODRiskOfDeath", "FRAILTY", "DIABETES", "PAO2_ANZ", "FIO2_ANZ", "DIED_HOSP", "DIED_ICU", "ICU_HRS", "HOSP_HRS", "HOSP_OUTCM", "INV_IND", "INV_DAYONE", "ECMO_IND", "NIV_IND", "CHR_RESP", "CHR_CVS", "COVID_pneumonitis_derived", "TRACHE_IND", "SMOKINGINTENSITY", "CHR_LIV", "CHR_REN", "INV_HOURS", "HOSP_AD_DTM", "HOSP_DS_DTM", "TREAT_LMT"))
 
@@ -251,9 +248,6 @@ arf <- arf |>
 # Change LOS to days (from hours)
 arf <- arf |>  mutate(icu_los = as.numeric(ICU_HRS)/24) |> select(-ICU_HRS)
 arf <- arf |>  mutate(hosp_los = as.numeric(HOSP_HRS)/24) |> select(-HOSP_HRS)
-
-# Change Site ID to Factor Variable for GLMM #
-#arf$SiteID <- as.factor(arf$SiteID)
 
 # Rename Hospital Discharge Destination (HOSP_OUTCM)
 arf <- arf |> 
@@ -1645,6 +1639,7 @@ ippv_avgcomp <- avg_comparisons(arf_model_ippv, variables = "INV_IND", compariso
 
 # NIV Vs No-NIV
 arf_niv <- arf |> filter(!(NIV_IND== "NULL"))
+
 # Run MLM
 arf_model_niv <- glmer(DIED_HOSP ~ 0 + IcuAdmitYYYY + pf_cont + NIV_IND  + Apache3Score + CHR_RESP + CHR_CVS + (1|SiteID),
                              family = binomial(link = "logit"), data = arf_niv, nAGQ = 0,
