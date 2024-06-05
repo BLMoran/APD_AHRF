@@ -1308,17 +1308,11 @@ arf_sev <- arf |> filter(pf_cat=="Severe")
 
 # Cox Proportional Hazards Model
 time_death <- coxph(Surv(time, status) ~ pf_cat  + SMOKINGINTENSITY + Apache3Score + CHR_RESP + CHR_CVS + frailty(SiteID), data=arf)
-time_death_strata <- coxph(Surv(time, status) ~ strata(pf_cat)  + SMOKINGINTENSITY + Apache3Score + CHR_RESP + CHR_CVS + frailty(SiteID), data=arf)
 time_death_timecat <- coxph(Surv(time, status) ~ time_cat  + SMOKINGINTENSITY + Apache3Score + CHR_RESP + CHR_CVS + frailty(SiteID), data=arf)
-time_death_timecat_strata <- coxph(Surv(time, status) ~ strata(time_cat)  + SMOKINGINTENSITY + Apache3Score + CHR_RESP + CHR_CVS + frailty(SiteID), data=arf)
 time_death_timecat_none <- coxph(Surv(time, status) ~ time_cat  + SMOKINGINTENSITY + Apache3Score + CHR_RESP + CHR_CVS + frailty(SiteID), data = arf_none)
-time_death_timecat_none_strata <- coxph(Surv(time, status) ~ strata(time_cat)  + SMOKINGINTENSITY + Apache3Score + CHR_RESP + CHR_CVS + frailty(SiteID), data=arf_none)
 time_death_timecat_mild <- coxph(Surv(time, status) ~ time_cat  + SMOKINGINTENSITY + Apache3Score + CHR_RESP + CHR_CVS + frailty(SiteID), data=arf_mild)
-time_death_timecat_mild_strata <- coxph(Surv(time, status) ~ strata(time_cat)  + SMOKINGINTENSITY + Apache3Score + CHR_RESP + CHR_CVS + frailty(SiteID), data=arf_mild)
 time_death_timecat_mod <- coxph(Surv(time, status) ~ time_cat  + SMOKINGINTENSITY + Apache3Score + CHR_RESP + CHR_CVS + frailty(SiteID), data=arf_mod)
-time_death_timecat_mod_strata <- coxph(Surv(time, status) ~ strata(time_cat)  + SMOKINGINTENSITY + Apache3Score + CHR_RESP + CHR_CVS + frailty(SiteID), data=arf_mod)
 time_death_timecat_sev <- coxph(Surv(time, status) ~ time_cat  + SMOKINGINTENSITY + Apache3Score + CHR_RESP + CHR_CVS + frailty(SiteID), data=arf_sev)
-time_death_timecat_sev_strata <- coxph(Surv(time, status) ~ strata(time_cat)  + SMOKINGINTENSITY + Apache3Score + CHR_RESP + CHR_CVS + frailty(SiteID), data=arf_sev)
 
 # Generate Table of Cox-PH Model Output
 table_cox <- time_death |>
@@ -1360,58 +1354,57 @@ table_cox_timecat_sev <- time_death_timecat_sev |>
 
 # Kaplan-Meier Curve
 # Original Categories
-time_death_km <-  time_death_strata |> 
-  survfit2() |> 
+time_death_km <-  
+  survfit2(Surv(time, status) ~ strata(pf_cat), data=arf) |> 
   ggsurvfit(linewidth = 1) +
   add_confidence_interval() +
   coord_cartesian(xlim = c(0, 365)) +
-  labs(title = "Time to Death", subtitle = "By AHRF Categories", x = "Time (Days)", y = "Conditional Survival Probability") +
-  add_pvalue(caption = "Log-rank \n{p.value}", location = "annotation", x = 200, y = 0.75) +
+  labs(title = "Time to Death", subtitle = "By AHRF Categories", x = "Time (Days)", y = "Survival Probability") +
   theme(legend.position = "right") +
   add_legend_title("AHRF Category")
 
-time_death_timecat_km <-  time_death_timecat_strata |> 
-  survfit2() |> 
+time_death_timecat_km <-  
+  survfit2(Surv(time, status) ~ strata(time_cat), data=arf) |> 
   ggsurvfit(linewidth = 1) +
   add_confidence_interval() +
   coord_cartesian(xlim = c(0, 365)) +
-  labs(title = "Time to Death", subtitle = "By Time Categories", x = "Time (Days)", y = "Conditional Survival Probability") +
+  labs(title = "Time to Death", subtitle = "By Time Categories", x = "Time (Days)", y = "Survival Probability") +
   theme(legend.position = "right") +
   add_legend_title("Time Category")
 
-time_death_timecat_none_km <-  time_death_timecat_none_strata |> 
-  survfit2() |> 
+time_death_timecat_none_km <-  
+  survfit2(Surv(time, status) ~ strata(time_cat), data=arf_none) |> 
   ggsurvfit(linewidth = 1) +
   add_confidence_interval() +
   coord_cartesian(xlim = c(0, 365)) +
-  labs(title = "Time to Death in Patients with No AHRF", subtitle = "By Time Categories", x = "Time (Days)", y = "Conditional Survival Probability") +
+  labs(title = "Time to Death in Patients with No AHRF", subtitle = "By Time Categories", x = "Time (Days)", y = "Survival Probability") +
   theme(legend.position = "right") +
   add_legend_title("Time Category")
 
-time_death_timecat_mild_km <-  time_death_timecat_mild_strata |> 
-  survfit2() |> 
+time_death_timecat_mild_km <-  
+  survfit2(Surv(time, status) ~ strata(time_cat), data=arf_mild) |> 
   ggsurvfit(linewidth = 1) +
   add_confidence_interval() +
   coord_cartesian(xlim = c(0, 365)) +
-  labs(title = "Time to Death in Patients with Mild AHRF", subtitle = "By Time Categories", x = "Time (Days)", y = "Conditional Survival Probability") +
+  labs(title = "Time to Death in Patients with Mild AHRF", subtitle = "By Time Categories", x = "Time (Days)", y = "Survival Probability") +
   theme(legend.position = "right") +
   add_legend_title("Time Category")
 
-time_death_timecat_mod_km <-  time_death_timecat_mod_strata |> 
-  survfit2() |> 
+time_death_timecat_mod_km <-  
+  survfit2(Surv(time, status) ~ strata(time_cat), data=arf_mod) |> 
   ggsurvfit(linewidth = 1) +
   add_confidence_interval() +
   coord_cartesian(xlim = c(0, 365)) +
-  labs(title = "Time to Death in Patients with Moderate AHRF", subtitle = "By Time Categories", x = "Time (Days)", y = "Conditional Survival Probability") +
+  labs(title = "Time to Death in Patients with Moderate AHRF", subtitle = "By Time Categories", x = "Time (Days)", y = "Survival Probability") +
   theme(legend.position = "right") +
   add_legend_title("Time Category")
 
-time_death_timecat_sev_km <-  time_death_timecat_sev_strata |> 
-  survfit2() |> 
+time_death_timecat_sev_km <-  
+  survfit2(Surv(time, status) ~ strata(time_cat), data=arf_sev) |> 
   ggsurvfit(linewidth = 1) +
   add_confidence_interval() +
   coord_cartesian(xlim = c(0, 365)) +
-  labs(title = "Time to Death in Patients with Severe AHRF", subtitle = "By Time Categories", x = "Time (Days)", y = "Conditional Survival Probability") +
+  labs(title = "Time to Death in Patients with Severe AHRF", subtitle = "By Time Categories", x = "Time (Days)", y = "Survival Probability") +
   theme(legend.position = "right") +
   add_legend_title("Time Category")
 
