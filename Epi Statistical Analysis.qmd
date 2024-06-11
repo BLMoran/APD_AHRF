@@ -293,6 +293,12 @@ arf <- arf |>
       INV_IND == "2"~ "No",
       INV_IND == "1" ~ "Yes"))
 
+# Rename Variables for INV_DAYONE
+arf <- arf |> 
+  mutate(INV_DAYONE = case_when(
+      INV_DAYONE == "2"~ "No",
+      INV_DAYONE == "1" ~ "Yes"))
+
 # Rename Variables for NIV_IND
 arf <- arf |> 
   mutate(NIV_IND = case_when(
@@ -1491,6 +1497,32 @@ ggplot(aes(x=pf_cont, y=pred_freqmodel, color = INV_IND))+
   theme(panel.grid.major.x = element_blank())+
   guides(color=guide_legend(override.aes=list(fill=NA)))
 ```
+## IPPV at Day 1
+```{r}
+arf |> filter(!(INV_DAYONE== "NULL")) |> 
+ggplot(aes(x=pf_cont, y=pred_freqmodel, color = INV_DAYONE))+
+  geom_smooth(method = "glm", formula = y ~ splines::ns(x, 4), se=TRUE)+
+  labs(x=expression(paste(PaO[2]:FiO[2], " Ratio")), y="Conditional Probability of Hospital Mortality", title="Association of Day 1 PF Ratio and Hospital Mortality", 
+       subtitle = "By Invasive Ventilation Status on Day 1 of ICU Admission", color = "Invasive Ventilation on Day 1")+
+  theme_bw() +
+  theme(panel.grid.major.x = element_blank())+
+  guides(color=guide_legend(override.aes=list(fill=NA)))
+```
+## IPPV after Day 1
+```{r}
+arf |> mutate(INV_AFTER_D1 = case_when(
+  INV_DAYONE == "No" & INV_IND == "Yes" ~ "Yes",
+  INV_DAYONE == "No" & INV_IND == "No" ~ "No")) |> 
+  drop_na(INV_AFTER_D1) |> 
+ggplot(aes(x=pf_cont, y=pred_freqmodel, color = INV_AFTER_D1))+
+  geom_smooth(method = "glm", formula = y ~ splines::ns(x, 4), se=TRUE)+
+  labs(x=expression(paste(PaO[2]:FiO[2], " Ratio")), y="Conditional Probability of Hospital Mortality", title="Association of Day 1 PF Ratio and Hospital Mortality", 
+       subtitle = "By Invasive Ventilation Status After Day 1 of ICU Admission", color = "Invasive Ventilation After Day 1")+
+  theme_bw() +
+  theme(panel.grid.major.x = element_blank())+
+  guides(color=guide_legend(override.aes=list(fill=NA)))
+```
+
 
 ## Non-Invasive Ventilation (NIV)
 ```{r}
@@ -1618,8 +1650,8 @@ ggplot(aes(x=pf_cont, y=pred_freqmodel, color = TREAT_LMT))+
 :::
 
 ### Subgroup Analysis (Adjusted Analysis)- Non-Graphical Analysis
-```{r}
-# IPPV Vs No-IPPV
+```{r, include=FALSE, cache.lazy=FALSE}
+# IPPV (at any time) Vs No-IPPV
 arf_ippv <- arf |> filter(!(INV_IND== "NA")) 
 
 # Run MLM
@@ -1629,6 +1661,31 @@ arf_model_ippv <- glmer(DIED_HOSP ~ 0 + IcuAdmitYYYY + pf_cont + INV_IND  + Apac
 
 # G-computation
 ippv_avgcomp <- avg_comparisons(arf_model_ippv, variables = "INV_IND", comparison="difference", type="response")
+
+# IPPV (on day one) Vs No-IPPV
+arf_ippv_d1 <- arf |> filter(!(INV_DAYONE== "NA")) 
+
+# Run MLM
+arf_model_ippv_d1 <- glmer(DIED_HOSP ~ 0 + IcuAdmitYYYY + pf_cont + INV_DAYONE  + Apache3Score + CHR_RESP + CHR_CVS + (1|SiteID),
+                             family = binomial(link = "logit"), data = arf_ippv_d1, nAGQ = 0,
+                             glmerControl(optimizer = "bobyqa", optCtrl = list(maxfun = 2e5)))
+
+# G-computation
+ippv_d1_avgcomp <- avg_comparisons(arf_model_ippv_d1, variables = "INV_DAYONE", comparison="difference", type="response")
+
+# IPPV (after day one) Vs No-IPPV
+arf_ippv_after_d1 <- arf |> mutate(INV_AFTER_D1 = case_when(
+  INV_DAYONE == "No" & INV_IND == "Yes" ~ "Yes",
+  INV_DAYONE == "No" & INV_IND == "No" ~ "No")) |> 
+  drop_na(INV_AFTER_D1)
+
+# Run MLM
+arf_model_ippv_after_d1 <- glmer(DIED_HOSP ~ 0 + IcuAdmitYYYY + pf_cont + INV_AFTER_D1  + Apache3Score + CHR_RESP + CHR_CVS + (1|SiteID),
+                             family = binomial(link = "logit"), data = arf_ippv_after_d1, nAGQ = 0,
+                             glmerControl(optimizer = "bobyqa", optCtrl = list(maxfun = 2e5)))
+
+# G-computation
+ippv_after_d1_avgcomp <- avg_comparisons(arf_model_ippv_after_d1, variables = "INV_AFTER_D1", comparison="difference", type="response")
 
 # NIV Vs No-NIV
 arf_niv <- arf |> filter(!(NIV_IND== "NULL"))
@@ -1700,11 +1757,13 @@ rxlim_avgcomp <- avg_comparisons(arf_model_Rxlim, variables = "TREAT_LMT", compa
 table <- function(data){
   df <- data |> select(Subgroup, contrast, estimate, conf.low, conf.high, p.value)|> 
     mutate(across(estimate:p.value, ~round(.,4))) |> 
-    reframe(Subgroup, Contrast = contrast, "ATE [95% CI]" = str_c(estimate, " [", conf.low, ", ", conf.high, "]"), "p-value" = p.value)
+    reframe(Subgroup, Contrast = contrast, "AME [95% CI]" = str_c(estimate, " [", conf.low, ", ", conf.high, "]"), "p-value" = p.value)
 }
 
 # Create dataframe
-ippv <- ippv_avgcomp |> mutate(Subgroup = "IPPV Vs No-IPPV") |> table()
+ippv_any <- ippv_avgcomp |> mutate(Subgroup = "IPPV (Any Time) Vs No-IPPV") |> table()
+ippv_d1 <- ippv_d1_avgcomp |> mutate(Subgroup = "IPPV (Day 1) Vs No-IPPV") |> table()
+ippv_after_d1 <- ippv_after_d1_avgcomp |> mutate(Subgroup = "IPPV (After Day 1) Vs No-IPPV") |> table()
 niv <- niv_avgcomp |> mutate(Subgroup = "NIV Vs No-NIV") |> table()
 ecmo <- ecmo_avgcomp |> mutate(Subgroup = "ECMO Vs No-ECMO") |> table()
 hosptype <- hosptype_avgcomp |> mutate(Subgroup = "Hospital Type") |> table()
@@ -1713,7 +1772,7 @@ age <- age_avgcomp |> mutate(Subgroup = "Age Categories") |> table()
 diag <- diag_avgcomp |> mutate(Subgroup = "Admission Diagnoses") |> table()
 rxlim <- rxlim_avgcomp |> mutate(Subgroup = "Treatment Limitations") |> table()
 # Bind all groups
-subgroup_df <- rbind(ippv, niv, ecmo, hosptype, sex, age, diag, rxlim) 
+subgroup_df <- rbind(ippv_any, ippv_d1, ippv_after_d1, niv, ecmo, hosptype, sex, age, diag, rxlim) 
 
 # Create Table
 Subgroup_table <-  subgroup_df |> 
@@ -1732,12 +1791,12 @@ Subgroup_table <-  subgroup_df |>
     heading.title.font.weight = "bold") |> 
   tab_header(title = "Subgroup Analysis")|>
   opt_align_table_header(align = "left")|> 
-  tab_footnote(footnote = "ATE = Average Treatment Effect")
-
-
+  tab_footnote(footnote = "AME = Average Marginal Effect")
 ```
 
-
+```{r}
+Subgroup_table
+```
 
 ### Sensitivity Analysis
 #### Different Severity of Illness Scores
