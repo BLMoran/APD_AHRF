@@ -77,7 +77,7 @@ knitr::opts_chunk$set(echo = F, message = F, warning = F, error = T,
 
 # Import the Data
 arf <- fread("~/Documents/Research/Projects/Current Projects/APD ARF Study/Data/2204_APD.csv",
-             select = c("SiteID", "HospitalClassification", "Country", "PatientID", "IcuAdmitYYYY", "SEX", "AGE", "ICU_SRCE", "AP3DIAG", "Apache3Score", "Apache2Score", "SOFA_Score",  "ANZRODRiskOfDeath", "FRAILTY", "DIABETES", "PAO2_ANZ", "FIO2_ANZ", "DIED_HOSP", "DIED_ICU", "ICU_HRS", "HOSP_HRS", "HOSP_OUTCM", "INV_IND", "INV_DAYONE", "ECMO_IND", "NIV_IND", "CHR_RESP", "CHR_CVS", "COVID_pneumonitis_derived", "TRACHE_IND", "SMOKINGINTENSITY", "CHR_LIV", "CHR_REN", "INV_HOURS", "HOSP_AD_DTM", "HOSP_DS_DTM", "TREAT_LMT"))
+             select = c("SiteID", "HospitalClassification", "Country", "PatientID", "IcuAdmitYYYY", "SEX", "AGE", "ICU_SRCE", "AP3DIAG", "Apache3Score", "Apache2Score", "SOFA_Score",  "ANZRODRiskOfDeath", "FRAILTY", "DIABETES", "PAO2_ANZ", "FIO2_ANZ", "DIED_HOSP", "DIED_ICU", "ICU_HRS", "HOSP_HRS", "HOSP_OUTCM", "INV_IND", "INV_DAYONE", "ECMO_IND", "NIV_IND", "CHR_RESP", "CHR_CVS", "COVID_pneumonitis_derived", "TRACHE_IND", "SMOKINGINTENSITY", "CHR_LIV", "CHR_REN", "INV_HOURS", "HOSP_AD_DTM", "HOSP_DS_DTM", "TREAT_LMT", "EMG_RSP_ADM", "PRE_ICU_HRS"))
 
 #==========================================DEMOGRAPHICS==========================================#
 
@@ -311,6 +311,12 @@ arf <- arf |>
       ECMO_IND == "2"~ "No",
       ECMO_IND == "1" ~ "Yes"))
 
+# Recode Emergency Response Variable
+arf <- arf |> 
+  mutate(EMG_RSP_ADM = case_when(
+    EMG_RSP_ADM == "2" ~ "No",
+    EMG_RSP_ADM == "1" ~ "Yes"))
+
 #==========================================REMOVE MISSING DATA==========================================#
 # Remove variables that have missing data
 arf <- arf |> 
@@ -318,13 +324,8 @@ arf <- arf |>
 
 arf <- arf[complete.cases(arf$Apache3Score),]
 arf <- arf[complete.cases(arf$icu_los),]
-arf <- arf[complete.cases(arf$AGE),]
 arf <- arf[complete.cases(arf$icu_admit_source),]
 arf <- arf[complete.cases(arf$pf_cont),]
-arf <- arf[complete.cases(arf$SEX),]
-#arf <- arf[complete.cases(arf$FRAILTY),]
-arf <- arf[complete.cases(arf$CHR_RESP),]
-arf <- arf[complete.cases(arf$CHR_CVS),]
 
 # Filtering patients with PF > 700
 arf <- arf |> 
@@ -341,7 +342,7 @@ arf <- arf |>  mutate(PatientID = row_number()) |>
 # Generate Table 1- AHRF vs No-AHRF
 t1_binary <- arf |>  
   select(patientn = count_pt, AGE, age_cat, SEX, Apache2Score, Apache3Score, ANZRODRiskOfDeath, SOFA_Score, ap3diag_min, COVID_pneumonitis_derived, icu_admit_source, HospitalClassification, INV_IND, INV_DAYONE, NIV_IND, ECMO_IND, TRACHE_IND, AHRF) |>  
-    tbl_summary(by = AHRF, missing = "no",
+    tbl_summary(by = AHRF,
             label = list(
               patientn = "Number of Patients",
               AGE = "Median Age in Years (IQR)",
@@ -426,6 +427,48 @@ t1 <- arf |>
   bold_labels() |> 
   italicize_labels()
 
+# Australia Vs New Zealand Demographics
+table_anz <- arf |>  
+  select(patientn = count_pt, AGE, age_cat, SEX, Apache2Score, Apache3Score, ANZRODRiskOfDeath, SOFA_Score, ap3diag_min, COVID_pneumonitis_derived, icu_admit_source, HospitalClassification, INV_IND, INV_DAYONE, NIV_IND, ECMO_IND, TRACHE_IND, AHRF, Country) |>  
+    tbl_summary(by = Country, missing = "no",
+            label = list(
+              patientn = "Number of Patients",
+              AGE = "Median Age in Years (IQR)",
+              age_cat = "Age Category, Years",
+              SEX = "Gender",
+              Apache2Score = "Median APACHE II Score (IQR)",
+              Apache3Score = "Median APACHE III Score (IQR)",
+              ANZRODRiskOfDeath = "Median ANZROD (IQR)",
+              SOFA_Score = "Median SOFA (IQR)",
+              ap3diag_min = "Admission Diagnosis",
+              COVID_pneumonitis_derived = "COVID Penumonitis (Proven)",
+              icu_admit_source = "Admission Source",
+              HospitalClassification = "Hospital Type",
+              INV_IND = "Invasive MV",
+              INV_DAYONE = "IMV Day 1",
+              NIV_IND = "NIV",
+              ECMO_IND = "ECMO",
+              TRACHE_IND = "Tracheostomy",
+              AHRF = "Acute Hypoxaemic Respiratory Failure"),
+            value = list(
+              COVID_pneumonitis_derived ~ 1),
+            statistic = list(
+              patientn ~ "{n}",
+              AGE ~ "{median} ({p25}-{p75})",
+              SEX ~ "{n} ({p}%)",
+              Apache2Score ~ "{median} ({p25}-{p75})",
+              Apache3Score ~ "{median} ({p25}-{p75})",
+              ANZRODRiskOfDeath ~ "{median} ({p25}-{p75})",
+              ANZRODRiskOfDeath ~ "{mean} ({sd})",
+              SOFA_Score ~ "{median} ({p25}-{p75})",
+              ap3diag_min ~ "{n} ({p}%)",
+              icu_admit_source ~ "{n} ({p}%)")) |> 
+  modify_header(stat_1 = "**Australia**", stat_2 = "**New Zealand**") |> 
+  modify_spanning_header(all_stat_cols() ~ "**Country**") |> 
+  add_overall(col_label = "**Overall**", last = FALSE) |> 
+  bold_labels() |> 
+  italicize_labels()
+
 ```
 
 ## Results
@@ -443,6 +486,10 @@ t1_binary
 ## AHRF Categories
 ```{r}
 t1
+```
+## Australia Vs NZ
+```{r}
+table_anz
 ```
 :::
 
@@ -1522,7 +1569,20 @@ ggplot(aes(x=pf_cont, y=pred_freqmodel, color = INV_AFTER_D1))+
   theme(panel.grid.major.x = element_blank())+
   guides(color=guide_legend(override.aes=list(fill=NA)))
 ```
-
+## IPPV at Day 1 vs IPPV Thereafter
+```{r}
+arf |> mutate(INV_TIME = case_when(
+  INV_DAYONE == "No" & INV_IND == "Yes" ~ "After Day 1",
+  INV_DAYONE == "Yes" ~ "Day 1")) |> 
+  drop_na(INV_TIME) |> 
+ggplot(aes(x=pf_cont, y=pred_freqmodel, color = INV_TIME))+
+  geom_smooth(method = "glm", formula = y ~ splines::ns(x, 4), se=TRUE)+
+  labs(x=expression(paste(PaO[2]:FiO[2], " Ratio")), y="Conditional Probability of Hospital Mortality", title="Association of Day 1 PF Ratio and Hospital Mortality", 
+       subtitle = "By Invasive Ventilation Status Timing", color = "Invasive Ventilation Timing")+
+  theme_bw() +
+  theme(panel.grid.major.x = element_blank())+
+  guides(color=guide_legend(override.aes=list(fill=NA)))
+```
 
 ## Non-Invasive Ventilation (NIV)
 ```{r}
@@ -1647,6 +1707,18 @@ ggplot(aes(x=pf_cont, y=pred_freqmodel, color = TREAT_LMT))+
   theme(panel.grid.major.x = element_blank())+
   guides(color=guide_legend(override.aes=list(fill=NA)))
 ```
+
+## MET Call Admission
+```{r}
+arf |> drop_na(EMG_RSP_ADM) |> 
+ggplot(aes(x=pf_cont, y=pred_freqmodel, color = EMG_RSP_ADM))+
+  geom_smooth(method = "glm", formula = y ~ splines::ns(x, 4), se=TRUE)+
+  labs(x=expression(paste(PaO[2]:FiO[2], " Ratio")), y="Conditional Probability of Hospital Mortality", title="Association of Day 1 PF Ratio and Hospital Mortality",
+       subtitle = "By MET Call Admission", color = "MET Call Admission")+
+  theme_bw() +
+  theme(panel.grid.major.x = element_blank())+
+  guides(color=guide_legend(override.aes=list(fill=NA)))
+```
 :::
 
 ### Subgroup Analysis (Adjusted Analysis)- Non-Graphical Analysis
@@ -1686,6 +1758,22 @@ arf_model_ippv_after_d1 <- glmer(DIED_HOSP ~ 0 + IcuAdmitYYYY + pf_cont + INV_AF
 
 # G-computation
 ippv_after_d1_avgcomp <- avg_comparisons(arf_model_ippv_after_d1, variables = "INV_AFTER_D1", comparison="difference", type="response")
+
+# IPPV D1 vs IPPV After D1
+arf_IPPV_d1vsafter <- arf |> 
+  mutate(INV_TIME = case_when(
+  INV_DAYONE == "No" & INV_IND == "Yes" ~ "After Day 1",
+  INV_DAYONE == "Yes" ~ "Day 1")) |> 
+  drop_na(INV_TIME)
+
+# Run MLM
+arf_model_ippv_d1vsafter <- glmer(DIED_HOSP ~ 0 + IcuAdmitYYYY + pf_cont + INV_TIME  + Apache3Score + CHR_RESP + CHR_CVS + (1|SiteID),
+                             family = binomial(link = "logit"), data = arf_IPPV_d1vsafter, nAGQ = 0,
+                             glmerControl(optimizer = "bobyqa", optCtrl = list(maxfun = 2e5)))
+
+# G-computation
+ippv_d1vsafter_avgcomp <- avg_comparisons(arf_model_ippv_d1vsafter, variables = "INV_TIME", comparison="difference", type="response")
+
 
 # NIV Vs No-NIV
 arf_niv <- arf |> filter(!(NIV_IND== "NULL"))
@@ -1752,6 +1840,14 @@ arf_model_Rxlim <- glmer(DIED_HOSP ~ 0 + IcuAdmitYYYY + pf_cont + TREAT_LMT  + A
 # G-computation
 rxlim_avgcomp <- avg_comparisons(arf_model_Rxlim, variables = "TREAT_LMT", comparison="difference", type="response")
 
+# MET Call Admission
+# Run MLM
+arf_model_met <- glmer(DIED_HOSP ~ 0 + IcuAdmitYYYY + pf_cont + EMG_RSP_ADM  + Apache3Score + CHR_RESP + CHR_CVS + (1|SiteID),
+                             family = binomial(link = "logit"), data = arf, nAGQ = 0,
+                             glmerControl(optimizer = "bobyqa", optCtrl = list(maxfun = 2e5)))
+# G-computation
+met_avgcomp <- avg_comparisons(arf_model_met, variables = "EMG_RSP_ADM", comparison="difference", type="response")
+
 ## Make Table with Results
 # Tabulate Data Function
 table <- function(data){
@@ -1764,6 +1860,7 @@ table <- function(data){
 ippv_any <- ippv_avgcomp |> mutate(Subgroup = "IPPV (Any Time) Vs No-IPPV") |> table()
 ippv_d1 <- ippv_d1_avgcomp |> mutate(Subgroup = "IPPV (Day 1) Vs No-IPPV") |> table()
 ippv_after_d1 <- ippv_after_d1_avgcomp |> mutate(Subgroup = "IPPV (After Day 1) Vs No-IPPV") |> table()
+ippv_d1vsafter <- ippv_d1vsafter_avgcomp |> mutate(Subgroup = "IPPV Day 1 Vs IPPV After Day 1") |> table()
 niv <- niv_avgcomp |> mutate(Subgroup = "NIV Vs No-NIV") |> table()
 ecmo <- ecmo_avgcomp |> mutate(Subgroup = "ECMO Vs No-ECMO") |> table()
 hosptype <- hosptype_avgcomp |> mutate(Subgroup = "Hospital Type") |> table()
@@ -1771,8 +1868,10 @@ sex <- sex_avgcomp |> mutate(Subgroup = "Sex") |> table()
 age <- age_avgcomp |> mutate(Subgroup = "Age Categories") |> table()
 diag <- diag_avgcomp |> mutate(Subgroup = "Admission Diagnoses") |> table()
 rxlim <- rxlim_avgcomp |> mutate(Subgroup = "Treatment Limitations") |> table()
+metcall <- met_avgcomp |> mutate(Subgroup = "MET Call Admission") |> table()
+
 # Bind all groups
-subgroup_df <- rbind(ippv_any, ippv_d1, ippv_after_d1, niv, ecmo, hosptype, sex, age, diag, rxlim) 
+subgroup_df <- rbind(ippv_any, ippv_d1, ippv_after_d1, ippv_d1vsafter, niv, ecmo, hosptype, sex, age, diag, rxlim, metcall) 
 
 # Create Table
 Subgroup_table <-  subgroup_df |> 
@@ -1797,6 +1896,67 @@ Subgroup_table <-  subgroup_df |>
 ```{r}
 Subgroup_table
 ```
+
+### Trends of Interventions Over Time
+:::panel-tabset
+## IPPV
+```{r, warning=FALSE}
+# Using IPPV at any time
+arf |> filter(!(INV_IND== "NULL")) |> 
+ggplot(aes(x=IcuAdmitYYYY, y=pred_hosp_mort, color = INV_IND))+
+  geom_smooth(method = "glm", formula = y ~ splines::ns(x, 4), se=TRUE)+
+  labs(x="Year", y="Conditional Probability of Hospital Mortality", title="Mortality Trend of Patients Receiving IPPV Over Time", 
+       color = "Invasive Ventilation")+
+  theme_bw() +
+  theme(panel.grid.major.x = element_blank())+
+  guides(color=guide_legend(override.aes=list(fill=NA)))+
+  coord_cartesian(ylim=c(0,0.2))
+```
+
+## NIV
+```{r, warning=FALSE}
+arf |> drop_na(NIV_IND) |> 
+ggplot(aes(x=IcuAdmitYYYY, y=pred_hosp_mort, color = NIV_IND))+
+  geom_smooth(method = "glm", formula = y ~ splines::ns(x, 4), se=TRUE)+
+  labs(x="Year", y="Conditional Probability of Hospital Mortality", title="Mortality Trend of Patients Receiving NIV Over Time", 
+       color = "Non-Invasive Ventilation")+
+  theme_bw() +
+  theme(panel.grid.major.x = element_blank())+
+  guides(color=guide_legend(override.aes=list(fill=NA)))+
+  coord_cartesian(ylim=c(0,0.40))
+```
+
+## ECMO
+```{r,warning=FALSE}
+arf |> drop_na(ECMO_IND) |> 
+ggplot(aes(x=IcuAdmitYYYY, y=pred_hosp_mort, color = ECMO_IND))+
+  geom_smooth(method = "glm", formula = y ~ splines::ns(x, 4), se=TRUE)+
+  labs(x="Year", y="Conditional Probability of Hospital Mortality", title="Mortality Trend of Patients Receiving ECMO Over Time", 
+       color = "ECMO")+
+  theme_bw() +
+  theme(panel.grid.major.x = element_blank())+
+  guides(color=guide_legend(override.aes=list(fill=NA)))+
+  coord_cartesian(ylim=c(0,0.45))
+```
+
+## All Types Ventilatory Support
+```{r}
+arf |> mutate(vent_sup = case_when(
+  ECMO_IND == "Yes"~ "ECMO",
+  INV_IND == "Yes" ~ "IPPV",
+  NIV_IND == "Yes" ~ "NIV",
+  .default = "None")) |>  
+  ggplot(aes(x=IcuAdmitYYYY, y=pred_hosp_mort))+
+  geom_smooth(aes(color = "Overall"), method = "glm", formula = y ~ splines::ns(x, 4), se=TRUE, linetype = 4)+
+  geom_smooth(aes(x=IcuAdmitYYYY, y=pred_hosp_mort, color = vent_sup), method = "glm", formula = y ~ splines::ns(x, 4), se=TRUE)+
+  labs(x="Year", y="Conditional Probability of Hospital Mortality", title="Hospital Mortality over Time", color = "Ventilatory Support")+
+  theme_bw() +
+  theme(panel.grid.major.x = element_blank())+
+  guides(color=guide_legend(override.aes=list(fill=NA, linetype = c(1,1,1,1,4))))+
+  scale_color_discrete(limits = c("ECMO", "IPPV","NIV", "None", "Overall"))
+
+```
+:::
 
 ### Sensitivity Analysis
 #### Different Severity of Illness Scores
