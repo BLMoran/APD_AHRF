@@ -77,7 +77,7 @@ knitr::opts_chunk$set(echo = F, message = F, warning = F, error = T,
 
 # Import the Data
 arf <- fread("~/Documents/Research/Projects/Current Projects/APD ARF Study/Data/2204_APD.csv",
-             select = c("SiteID", "HospitalClassification", "Country", "PatientID", "IcuAdmitYYYY", "SEX", "AGE", "ICU_SRCE", "AP3DIAG", "Apache3Score", "Apache2Score", "SOFA_Score",  "ANZRODRiskOfDeath", "FRAILTY", "DIABETES", "PAO2_ANZ", "FIO2_ANZ", "DIED_HOSP", "DIED_ICU", "ICU_HRS", "HOSP_HRS", "HOSP_OUTCM", "INV_IND", "INV_DAYONE", "ECMO_IND", "NIV_IND", "CHR_RESP", "CHR_CVS", "COVID_pneumonitis_derived", "TRACHE_IND", "SMOKINGINTENSITY", "CHR_LIV", "CHR_REN", "INV_HOURS", "HOSP_AD_DTM", "HOSP_DS_DTM", "TREAT_LMT", "EMG_RSP_ADM", "PRE_ICU_HRS"))
+             select = c("SiteID", "HospitalClassification", "Country", "PatientID", "IcuAdmitYYYY", "SEX", "AGE", "ICU_SRCE", "AP3DIAG", "Apache3Score", "Apache2Score", "SOFA_Score",  "ANZRODRiskOfDeath", "FRAILTY", "DIABETES", "PAO2_ANZ", "FIO2_ANZ", "DIED_HOSP", "DIED_ICU", "ICU_HRS", "HOSP_HRS", "HOSP_OUTCM", "INV_IND", "INV_DAYONE", "ECMO_IND", "NIV_IND", "CHR_RESP", "CHR_CVS", "COVID_pneumonitis_derived", "TRACHE_IND", "SMOKINGINTENSITY", "CHR_LIV", "CHR_REN", "INV_HOURS", "HOSP_AD_DTM", "HOSP_DS_DTM", "TREAT_LMT", "EMG_RSP_ADM", "PRE_ICU_HRS", "PANDEMIC"))
 
 #==========================================DEMOGRAPHICS==========================================#
 
@@ -780,6 +780,136 @@ ggplot(data=arf, aes(x=pf_cont, y=DIED_HOSP))+
   theme_bw() +
   theme(panel.grid.major.x = element_blank())
 ```
+#### Unadjusted Proprtions of Patients Receiving Interventions Over Time- Graphical
+
+::: panel-tabset
+## Invasive Ventilation on Day 1 Overall
+```{r, warning=FALSE, message=FALSE}
+arf |> group_by(IcuAdmitYYYY, INV_IND) |>
+  summarise(n = n()) |> 
+  mutate(percent = 100*n/sum(n)) |> 
+  filter(INV_IND=="Yes") |>
+  ggplot()+
+  geom_line(aes(x = IcuAdmitYYYY, y = percent))+
+    labs(x="Year", y="Proportion (%)", title="Proportion of Patients Receving IPPV on Day 1 over Time", subtitle = "Overall")+
+  theme_bw() +
+  theme(panel.grid.minor.x = element_blank(), panel.grid.minor.y = element_blank())+
+  scale_x_continuous(breaks = seq(2005, 2022, by = 2))
+```
+
+## Invasive Ventilation on Day 1 by AHRF Cat
+```{r, warning=FALSE, message=FALSE}
+arf |> group_by(IcuAdmitYYYY, pf_cat, INV_DAYONE) |>
+  summarise(n = n()) |> 
+  mutate(percent = 100*n/sum(n)) |> 
+  filter(INV_DAYONE=="Yes") |>
+  ggplot()+
+  geom_line(aes(x = IcuAdmitYYYY, y = percent, color = pf_cat))+
+    labs(x="Year", y="Proportion (%)", title="Proportion of Patients Receving IPPV on Day 1 over Time", subtitle = "by AHRF Category", color = "AHRF Category")+
+  theme_bw() +
+  theme(panel.grid.minor.x = element_blank(), panel.grid.minor.y = element_blank())+
+  guides(color=guide_legend(override.aes=list(fill=NA)))+
+  scale_y_continuous(breaks = seq(0, 80, by = 5))+
+  scale_x_continuous(breaks = seq(2005, 2022, by = 2))
+```
+
+## Invasive Ventilation After Day 1
+```{r, warning=FALSE, message=FALSE}
+arf |> group_by(IcuAdmitYYYY, pf_cat, INV_IND) |>
+  summarise(n = n()) |> 
+  mutate(percent = 100*n/sum(n)) |> 
+  filter(INV_IND=="Yes") |>
+  ggplot()+
+  geom_line(aes(x = IcuAdmitYYYY, y = percent, color = pf_cat))+
+    labs(x="Year", y="Proportion (%)", title="Proportion of Patients Receving IPPV on Any Day over Time", subtitle = "by AHRF Category", color = "AHRF Category")+
+  theme_bw() +
+  theme(panel.grid.minor.x = element_blank(), panel.grid.minor.y = element_blank())+
+  guides(color=guide_legend(override.aes=list(fill=NA)))+
+  scale_y_continuous(breaks = seq(0, 80, by = 5))+
+  scale_x_continuous(breaks = seq(2005, 2022, by = 2))
+```
+
+## Non-Invasive Ventilation
+```{r, warning=FALSE, message=FALSE}
+arf |> group_by(IcuAdmitYYYY, pf_cat, NIV_IND) |>
+  summarise(n = n()) |> 
+  mutate(percent = 100*n/sum(n)) |> 
+  filter(NIV_IND=="Yes") |>
+  ggplot()+
+  geom_line(aes(x = IcuAdmitYYYY, y = percent, color = pf_cat))+
+    labs(x="Year", y="Proportion (%)", title="Proportion of Patients Receving NIV on Any Day over Time", subtitle = "by AHRF Category", color = "AHRF Category")+
+  theme_bw() +
+  theme(panel.grid.minor.x = element_blank(), panel.grid.minor.y = element_blank())+
+  guides(color=guide_legend(override.aes=list(fill=NA)))+
+  scale_y_continuous(breaks = seq(0, 80, by = 5))+
+  scale_x_continuous(breaks = seq(2005, 2022, by = 2))
+```
+
+## ECMO
+```{r, warning=FALSE, message=FALSE}
+arf |> group_by(IcuAdmitYYYY, pf_cat, ECMO_IND) |>
+  summarise(n = n()) |> 
+  mutate(percent = 100*n/sum(n)) |> 
+  filter(ECMO_IND=="Yes") |>
+  ggplot()+
+  geom_line(aes(x = IcuAdmitYYYY, y = percent, color = pf_cat))+
+    labs(x="Year", y="Proportion (%)", title="Proportion of Patients Receving ECMO on Any Day over Time", subtitle = "by AHRF Category", color = "AHRF Category")+
+  theme_bw() +
+  theme(panel.grid.minor.x = element_blank(), panel.grid.minor.y = element_blank())+
+  guides(color=guide_legend(override.aes=list(fill=NA)))+
+  scale_y_continuous(breaks = seq(0, 80, by = 1))+
+  scale_x_continuous(breaks = seq(2005, 2022, by = 2))
+```
+:::
+
+#### Unadjusted Proprtions of Patients Receiving Interventions Over Time- Tabular
+```{r, warning=FALSE, message=FALSE}
+
+# Mutate Time Epochs
+arf_int <- arf |> 
+  mutate(time_cat = case_when(
+    IcuAdmitYYYY >=2005 & IcuAdmitYYYY <2010 ~ "2005-09",
+    IcuAdmitYYYY >=2010 & IcuAdmitYYYY <2015 ~ "2010-14",
+    IcuAdmitYYYY >=2015 & IcuAdmitYYYY <2020 ~ "2015-19",
+    IcuAdmitYYYY >=2020 & IcuAdmitYYYY <2023 ~ "2020-22"))
+
+#Calculate Proportions
+inv_ind <- arf_int |> 
+  group_by(time_cat, INV_IND) |>
+  summarise(n = n()) |> 
+  mutate(percent = 100*n/sum(n)) |> 
+  filter(INV_IND=="Yes") |> 
+    mutate(across(percent, ~round(.,4))) |> 
+    select(time_cat, percent)
+
+inv_dayone <- arf_int |> 
+    group_by(time_cat, INV_DAYONE) |>
+  summarise(n = n()) |> 
+  mutate(percent = 100*n/sum(n)) |> 
+  filter(INV_DAYONE=="Yes") |> 
+    mutate(across(percent, ~round(.,4))) |> 
+    select(percent)
+
+niv_ind <- arf_int |> 
+    group_by(time_cat, NIV_IND) |>
+  summarise(n = n()) |> 
+  mutate(percent = 100*n/sum(n)) |> 
+  filter(NIV_IND=="Yes") |> 
+    mutate(across(percent, ~round(.,4))) |> 
+    select(percent)
+
+ecmo_ind <- arf_int |> 
+      group_by(time_cat, ECMO_IND) |>
+  summarise(n = n()) |> 
+  mutate(percent = 100*n/sum(n)) |> 
+  filter(ECMO_IND=="Yes") |> 
+    mutate(across(percent, ~round(.,4))) |> 
+    select(time_cat, percent)
+
+arf_prop <- cbind(inv_ind, inv_dayone, niv_ind, ecmo_ind)
+
+```
+
 #### Unadjusted Trends in Hospital Outcomes Over Time by AHRF Categories
 
 ::: panel-tabset
@@ -1719,6 +1849,22 @@ ggplot(aes(x=pf_cont, y=pred_freqmodel, color = EMG_RSP_ADM))+
   theme(panel.grid.major.x = element_blank())+
   guides(color=guide_legend(override.aes=list(fill=NA)))
 ```
+## COVID Pneumonitis
+```{r}
+arf |> filter(IcuAdmitYYYY>2020) |> 
+  mutate(covid = case_when(
+  COVID_pneumonitis_derived == 1 ~ "COVID Pneumonitis",
+  COVID_pneumonitis_derived == 2 ~ "Probable COVID (or Exacerbated Condition)",
+  COVID_pneumonitis_derived == 3 ~ "Incidental COVID",
+  COVID_pneumonitis_derived == 0 ~ "No COVID")) |> 
+ggplot(aes(x=pf_cont, y=pred_freqmodel, color = covid))+
+  geom_smooth(method = "glm", formula = y ~ splines::ns(x, 4), se=TRUE)+
+  labs(x=expression(paste(PaO[2]:FiO[2], " Ratio")), y="Conditional Probability of Hospital Mortality", title="Association of Day 1 PF Ratio and Hospital Mortality",
+       subtitle = "By COVID Status (2020-2022)", color = "COVID Status")+
+  theme_bw() +
+  theme(panel.grid.major.x = element_blank())+
+  guides(color=guide_legend(override.aes=list(fill=NA)))
+```
 :::
 
 ### Subgroup Analysis (Adjusted Analysis)- Non-Graphical Analysis
@@ -1848,6 +1994,23 @@ arf_model_met <- glmer(DIED_HOSP ~ 0 + IcuAdmitYYYY + pf_cont + EMG_RSP_ADM  + A
 # G-computation
 met_avgcomp <- avg_comparisons(arf_model_met, variables = "EMG_RSP_ADM", comparison="difference", type="response")
 
+## COVID Status
+arf_covid <- arf |> filter(IcuAdmitYYYY>2020) |> 
+  mutate(covid = case_when(
+  COVID_pneumonitis_derived == 1 ~ "COVID Pneumonitis",
+  COVID_pneumonitis_derived == 2 ~ "Probable COVID (or Exacerbated Condition)",
+  COVID_pneumonitis_derived == 3 ~ "Incidental COVID",
+  COVID_pneumonitis_derived == 0 ~ "No COVID")) |> 
+  # Refactor to make "No COVID" the comaprator
+  mutate(covid = factor(covid, levels = c("No COVID", "COVID Pneumonitis", "Probable COVID (or Exacerbated Condition)", "Incidental COVID")))
+
+# Run MLM
+arf_model_covid <- glmer(DIED_HOSP ~ 0 + IcuAdmitYYYY + pf_cont + covid  + Apache3Score + CHR_RESP + CHR_CVS + (1|SiteID),
+                             family = binomial(link = "logit"), data = arf_covid, nAGQ = 0,
+                             glmerControl(optimizer = "bobyqa", optCtrl = list(maxfun = 2e5)))
+# G-computation
+covid_avgcomp <- avg_comparisons(arf_model_covid, variables = "covid", comparison="difference", type="response")
+
 ## Make Table with Results
 # Tabulate Data Function
 table <- function(data){
@@ -1869,9 +2032,10 @@ age <- age_avgcomp |> mutate(Subgroup = "Age Categories") |> table()
 diag <- diag_avgcomp |> mutate(Subgroup = "Admission Diagnoses") |> table()
 rxlim <- rxlim_avgcomp |> mutate(Subgroup = "Treatment Limitations") |> table()
 metcall <- met_avgcomp |> mutate(Subgroup = "MET Call Admission") |> table()
+covid <- covid_avgcomp |> mutate(Subgroup = "COVID Status") |> table()
 
 # Bind all groups
-subgroup_df <- rbind(ippv_any, ippv_d1, ippv_after_d1, ippv_d1vsafter, niv, ecmo, hosptype, sex, age, diag, rxlim, metcall) 
+subgroup_df <- rbind(ippv_any, ippv_d1, ippv_after_d1, ippv_d1vsafter, niv, ecmo, hosptype, sex, age, diag, rxlim, metcall, covid) 
 
 # Create Table
 Subgroup_table <-  subgroup_df |> 
